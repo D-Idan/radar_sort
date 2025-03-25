@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from models.record_oi import RecordEncoder, RecordDecoder
+from radar_sort.models.record_oi import RecordEncoder, RecordDecoder
 
 
 class MVRecord(nn.Module):
