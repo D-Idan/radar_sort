@@ -4,14 +4,17 @@ import torch
 import yaml
 from torchsummary import summary
 
+from utils.paths_internal import CONFIG_DIR
+
 
 def test_record_models():
     """Test all RECORD model variants with dummy inputs"""
     # Test config paths - update these based on your project structure
     CONFIG_PATHS = {
-        'mvrecord': 'configs/carrada/config_mvrecord_carrada.yaml',
-        'record_ra': 'configs/carrada/config_record_ra_carrada.yaml',
-        'record_rd': 'configs/carrada/config_record_rd_carrada.yaml'
+        'mvrecord': CONFIG_DIR / 'carrada/config_mac_mvrecord_carrada.yaml',
+        # 'mvrecord': 'configs/carrada/config_mvrecord_carrada.yaml',
+        # 'record_ra': 'configs/carrada/config_record_ra_carrada.yaml',
+        # 'record_rd': 'configs/carrada/config_record_rd_carrada.yaml'
     }
 
     # Create dummy inputs for different views
@@ -26,7 +29,7 @@ def test_record_models():
     backbone_config = yaml.load(open(config['model_cfg']['backbone_pth'], 'r'), yaml.FullLoader)
 
     print("\nTesting MV-RECORD...")
-    from models import MVRecord
+    from models.segmentation.record import MVRecord
     model = MVRecord(config=backbone_config, n_classes=4, n_frames=5)
 
     # Test forward pass
@@ -39,7 +42,7 @@ def test_record_models():
     config = yaml.load(open(CONFIG_PATHS['record_ra'], 'r'), yaml.FullLoader)
     backbone_config = yaml.load(open(config['model_cfg']['backbone_pth'], 'r'), yaml.FullLoader)
 
-    from models import Record
+    from models.segmentation.record import Record
     model_ra = Record(config=backbone_config, n_class=4, in_channels=1)
     ra_output = model_ra(dummy_inputs['ra'])
     assert ra_output.shape == (1, 4, 256, 256), "RA-only output shape mismatch"
