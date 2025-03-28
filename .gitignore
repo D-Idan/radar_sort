@@ -43,7 +43,7 @@ ENV/
 
 # Jupyter
 .ipynb_checkpoints
-*.ipynb
+#*.ipynb
 
 # Dataset cache
 .cache/
