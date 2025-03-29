@@ -4,13 +4,19 @@ From: https://github.com/valeoai/MVRSS
 """
 import json
 import os
+from utils.paths_collector import Paths
 
 class Carrada:
     """Class to load CARRADA dataset"""
 
-    def __init__(self, config):
-        self.warehouse = config['dataset_cfg']['warehouse']
-        self.carrada = config['dataset_cfg']['carrada']
+    def __init__(self, config_model):
+        self.paths = Paths().get()
+        if 'dataset_cfg' not in config_model:
+            self.warehouse = self.paths['warehouse']
+            self.carrada = self.paths['carrada']
+        else:
+            self.warehouse = config_model['dataset_cfg']['warehouse']
+            self.carrada = config_model['dataset_cfg']['carrada']
         self.data_seq_ref = self._load_data_seq_ref()
         self.annotations = self._load_dataset_ids()
         self.train = dict()
