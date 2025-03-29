@@ -111,15 +111,12 @@ class Tester:
                         ad_data = normalize(ad_data, 'angle_doppler', norm_type=self.norm_type)
                         rd_outputs, ra_outputs = net(rd_data, ra_data, ad_data)
                     else:
-                        # Debug shapes
-                        print(f"rd_data.shape: {rd_data.shape}")
-                        print(f"ra_data.shape: {ra_data.shape}")
                         rd_outputs, ra_outputs = net(rd_data, ra_data)
                     rd_outputs = rd_outputs.to(self.device)
                     ra_outputs = ra_outputs.to(self.device)
 
                     if get_quali:
-                        quali_iter_rd = get_qualitatives(rd_outputs, rd_mask, self.paths,
+                        quali_iter_rd = get_qualitatives((rd_outputs), rd_mask, self.paths,
                                                          seq_name, quali_iter_rd, 'range_doppler')
                         quali_iter_ra = get_qualitatives(ra_outputs, ra_mask, self.paths,
                                                          seq_name, quali_iter_ra, 'range_angle')
