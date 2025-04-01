@@ -47,3 +47,6 @@ ENV/
 
 # Dataset cache
 .cache/
+
+# Config
+*.ini
