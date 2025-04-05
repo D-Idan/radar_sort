@@ -252,3 +252,53 @@ class Tester:
     def set_annot_type(self, annot_type):
         """Set annotation type to test on (specific to CARRADA)"""
         self.annot_type = annot_type
+
+
+
+    def predict_step(self, net, frame_dataloader, save_plot_path='./results'):
+
+        net.eval()
+
+        with torch.no_grad():
+
+
+            for j, frame in enumerate(frame_dataloader):
+                rd_data = frame['rd_matrix'].to(self.device).float()
+                ra_data = frame['ra_matrix'].to(self.device).float()
+                ad_data = frame['ad_matrix'].to(self.device).float()
+                rd_mask = frame['rd_mask'].to(self.device).float()
+                ra_mask = frame['ra_mask'].to(self.device).float()
+                rd_data = normalize(rd_data, 'range_doppler', norm_type=self.norm_type)
+                ra_data = normalize(ra_data, 'range_angle', norm_type=self.norm_type)
+
+
+                rd_outputs, ra_outputs = mvrss.mvrss_run_net(self.model, net, rd_data, ra_data, ad_data=ad_data,
+                                                    device=self.device, norm_type=self.norm_type)
+                # Move to cpu with no grad as torch.Tensor
+                rd_outputs = rd_outputs.cpu().clone().detach()
+                ra_outputs = ra_outputs.cpu().clone().detach()
+
+                if save_plot_path:
+                    # Prepare inputs
+                    vis_data = visualize_radar_nextsort(
+                        rd_data, ra_data,
+                        rd_mask, ra_mask,
+                        rd_outputs, ra_outputs,
+                        nb_classes=self.nb_classes,
+                        output_path=save_plot_path,
+                        frame_num=-1,
+                        camera_image=None
+                    )
+
+                    # Pass directly to plot_combined_results
+                    plot_combined_results(**vis_data)
+
+                return {
+                    'rd_outputs': rd_outputs,
+                    'ra_outputs': ra_outputs,
+                    'rd_mask': rd_mask,
+                    'ra_mask': ra_mask,
+                    'rd_data': rd_data,
+                    'ra_data': ra_data,
+
+                }

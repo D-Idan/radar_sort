@@ -41,7 +41,7 @@ def plot_matrix(ax, matrix, mask, min_area, title):
 def plot_combined_results(rd_matrix, ra_matrix,
                          rd_mask_gt, ra_mask_gt,
                          rd_mask_pred, ra_mask_pred,
-                         output_path=None, frame_num=None,
+                         output_path=None, frame_num=None, frame_num_in_seq=1,
                          camera_image=None, min_area=10,
                          figsize=(24, 16)):
     """
@@ -96,9 +96,9 @@ def plot_combined_results(rd_matrix, ra_matrix,
         ax_cam.set_title('Camera View', fontsize=12)
 
     # Save or display results
-    if output_path and frame_num is not None:
+    if output_path:
         os.makedirs(output_path, exist_ok=True)
-        save_path = os.path.join(output_path, f'frame_{frame_num}_combined.png')
+        save_path = os.path.join(output_path, f'frame_{frame_num_in_seq}_combined.png')
         plt.savefig(save_path, bbox_inches='tight', dpi=150)
         plt.close()
         print(f"Saved combined results to: {save_path}")

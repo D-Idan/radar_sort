@@ -55,6 +55,10 @@ class Tracklet:
 class TrackManager:
     """
     Manages multiple tracklets across frames.
+    Handles track creation, update, and deletion.
+    Parameters:
+    - init_frames_needed: Number of frames needed to confirm a track.
+    - max_missed: Maximum number of missed frames before a track is considered dead.
     """
 
     def __init__(self, init_frames_needed=3, max_missed=3):
