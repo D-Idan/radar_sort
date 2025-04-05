@@ -57,7 +57,7 @@ def test_model():
     tester.set_annot_type(cfg['annot_type'])
 
     for i, sequence_data in enumerate(seq_testloader):
-        frame_dataloader = load_carrada_frame_dataloader(cfg, seq_name=sequence_data['name'], seq=sequence_data['seq'],
+        frame_dataloader = load_carrada_frame_dataloader(cfg, seq_name=sequence_data[0], seq=sequence_data[1],
                                                           split='Train', add_temp=False)
 
         if cfg['model'] == 'mvnet':
@@ -76,17 +76,17 @@ def test_model():
             detections_rd = detect_objects(seg_mask_rd, min_area=50)
             detections_ra = detect_objects(seg_mask_ra, min_area=50)
 
-            # Update tracker with detections; get active tracks
-            active_tracks = tracker.update(detections)
-
-            # Print active track IDs
-            active_ids = [track.track_id for track in active_tracks]
-            print(f"Frame {t}: {len(detections)} detections, Active track IDs: {active_ids}")
-
-            # Optional: If radar point data is available, assign points to tracks here
-
-            # Visualize the RD and RA matrices with bounding boxes from segmentation mask
-            plot_rd_ra_with_bboxes(rd_frame, ra_frame, seg_mask, min_area=50)
+            # # Update tracker with detections; get active tracks
+            # active_tracks = tracker.update(detections)
+            #
+            # # Print active track IDs
+            # active_ids = [track.track_id for track in active_tracks]
+            # print(f"Frame {t}: {len(detections)} detections, Active track IDs: {active_ids}")
+            #
+            # # Optional: If radar point data is available, assign points to tracks here
+            #
+            # # Visualize the RD and RA matrices with bounding boxes from segmentation mask
+            # plot_rd_ra_with_bboxes(rd_frame, ra_frame, seg_mask, min_area=50)
 
         print("Tracking complete.")
     print(f"Finished processing sequence {i + 1}/{len(seq_testloader)}")
