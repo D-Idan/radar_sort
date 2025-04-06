@@ -25,12 +25,21 @@ from tester import Tester
 from mvrss.utils.functions import count_params
 
 from mvrss.models import TMVANet, MVNet
+import platform
 
 
 cfg_mac = "/Users/daniel/Idan/University/Masters/Thesis/2024/datasets/logs/carrada/mvnet/mvnet_e300_lr0.0001_s42_0/config.json"
-target_seq = '2019-09-16-12-55-51' # None
+cfg_ubuntu = "/mnt/data/myprojects/PycharmProjects/thesis_repos/MVRSS/logs/carrada/mvnet/mvnet_e300_lr0.0001_s42_0/config.json"
+if platform.system() == 'Darwin':  # macOS
+    cfg = cfg_mac
+elif platform.system() == 'Linux':  # Ubuntu
+    cfg = cfg_ubuntu
+else:
+    raise EnvironmentError("Unsupported operating system")
 
-def test_model():
+target_seq = '2019-09-16-12-55-51'  # None
+
+def test_model(cfg=cfg):
 
     # Initialize tracker parameters
     tracker = TrackManager(init_frames_needed=2, max_missed=3)
@@ -38,7 +47,7 @@ def test_model():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', help='Path to config file of the model to test.',
-                        default=cfg_mac)
+                        default=cfg)
     args = parser.parse_args()
     cfg_path = args.cfg
     with open(cfg_path, 'r') as fp:
