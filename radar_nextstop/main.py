@@ -29,7 +29,7 @@ else:
 
 target_seq = '2019-09-16-12-55-51'  # None
 
-def test_model():
+def test_model(cfg=cfg):
 
     # Initialize tracker parameters
     tracker = TrackManager(init_frames_needed=2, max_missed=3)
