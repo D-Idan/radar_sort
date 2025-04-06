@@ -51,3 +51,4 @@ ENV/
 # Config
 *.ini
 configs/config.ini
+configs/config.ini
