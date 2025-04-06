@@ -204,19 +204,35 @@ def visualize_radar_nextsort(rd_data, ra_data, rd_mask, ra_mask,
     }
 
 
-def plot_image_2D(map):
+def plot_image_2D(map, save_path=None):
     """
     Plot a 2D image using matplotlib
     """
-    plt.imshow(map, cmap='gray')
+    plt.imshow(mask_to_img(map), cmap='gray')
     plt.axis('off')
-    plt.show(block=True)
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=150)
+        plt.close()
+    else:
+        plt.show()
 
-def plot_image_3D(map):
+
+def plot_image_RGB(map, save_path=None):
     """
-    Plot a 3D image using matplotlib
+    Plot a 2D RGB image using matplotlib.
+
+    Args:
+        map (np.ndarray): RGB image in shape (3, H, W) or (H, W, 3).
+        save_path (str, optional): Path to save the image. If None, displays the image.
     """
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.voxels(map, edgecolor='k')
-    plt.show(block=True)
+    if map.ndim == 3 and map.shape[0] == 3:  # If shape is (3, H, W)
+        map = np.transpose(map, (1, 2, 0))  # Convert to (H, W, 3)
+
+    plt.imshow(map)
+    plt.axis('off')
+
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=150)
+        plt.close()
+    else:
+        plt.show()

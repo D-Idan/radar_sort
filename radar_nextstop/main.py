@@ -1,7 +1,7 @@
 # main.py
 
 """Main script to test a pretrained model"""
-from radar_nextstop.visualize_radar_nextsort import plot_image_2D, plot_image_3D
+
 import argparse
 import json
 import torch
@@ -15,14 +15,14 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-
+from radar_nextstop.visualize_radar_nextsort import plot_image_2D, plot_image_RGB
 from radar_nextstop.object_detector import detect_objects
 from radar_nextstop.track_manager import TrackManager
 from utils.paths_collector import Paths
 from data_loader import load_carrada_data, load_carrada_frame_dataloader
 from tester import Tester
 
-from mvrss.utils.functions import count_params
+from mvrss.utils.functions import count_params, normalize
 
 from mvrss.models import TMVANet, MVNet
 import platform
@@ -88,18 +88,18 @@ def test_model(cfg=cfg):
 
             # Process each batch frames
             for t in range(len(run_result['rd_outputs'])):
-                seg_mask_rd = run_result['rd_outputs'][t]
-                seg_mask_ra = run_result['ra_outputs'][t]
+                seg_pred_rd = normalize(run_result['rd_outputs'][t], signal_type='range_doppler', norm_type='local')
+                seg_pred_ra = normalize(run_result['ra_outputs'][t], signal_type='range_angle', norm_type='local')
+                seg_mask_rd = torch.argmax(seg_pred_rd, dim=0)
+                seg_mask_ra = torch.argmax(seg_pred_ra, dim=0)
                 rd_frame = run_result['rd_data'][t]
                 ra_frame = run_result['ra_data'][t]
 
-                plot_image_3D(seg_mask_ra)
-                plot_image_2D(torch.argmax(
-                    torch.Tensor(seg_mask_rd), axis=0).numpy())
 
-                # Detect objects from segmentation mask
-                detections_rd = detect_objects(seg_mask_rd, min_area=50)
-                detections_ra = detect_objects(seg_mask_ra, min_area=50)
+
+                # # Detect objects from segmentation mask
+                # detections_rd = detect_objects(seg_mask_rd, min_area=50)
+                # detections_ra = detect_objects(seg_mask_ra, min_area=50)
 
                 # # Update tracker with detections; get active tracks
                 # active_tracks = tracker.update(detections)
