@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 import torch
+from fontTools.unicodedata import block
 
 from mvrss.utils.functions import mask_to_img
 from radar_nextstop.object_detector import create_bounding_boxes
@@ -201,3 +202,21 @@ def visualize_radar_nextsort(rd_data, ra_data, rd_mask, ra_mask,
         'frame_num': frame_num,
         'camera_image': camera_image
     }
+
+
+def plot_image_2D(map):
+    """
+    Plot a 2D image using matplotlib
+    """
+    plt.imshow(map, cmap='gray')
+    plt.axis('off')
+    plt.show(block=True)
+
+def plot_image_3D(map):
+    """
+    Plot a 3D image using matplotlib
+    """
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.voxels(map, edgecolor='k')
+    plt.show(block=True)

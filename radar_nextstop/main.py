@@ -1,10 +1,20 @@
 # main.py
 
 """Main script to test a pretrained model"""
+from radar_nextstop.visualize_radar_nextsort import plot_image_2D, plot_image_3D
 import argparse
 import json
 import torch
 from torch.utils.data import DataLoader
+import sys
+from pathlib import Path
+
+# Get the current file's directory and move up to the project's root
+ROOT_DIR = Path(__file__).resolve().parents[1]
+# Add the root directory to sys.path
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 
 from radar_nextstop.object_detector import detect_objects
 from radar_nextstop.track_manager import TrackManager
@@ -59,37 +69,43 @@ def test_model():
     for i, sequence_data in enumerate(seq_testloader):
         frame_dataloader = load_carrada_frame_dataloader(cfg, seq_name=sequence_data[0], seq=sequence_data[1],
                                                           split='Train', add_temp=False)
+        for ind_batch, batch_frames in enumerate(frame_dataloader):
+            if cfg['model'] == 'mvnet':
+                run_result = tester.predict_step(
+                    model, batch_frames, save_plot_path=None)
+            else:
+                run_result = tester.predict_step(
+                    model, batch_frames, save_plot_path=None)
 
-        if cfg['model'] == 'mvnet':
-            run_result = tester.predict_step(model, frame_dataloader, save_plot_path=None)
-        else:
-            run_result = tester.predict_step(model, frame_dataloader, save_plot_path=None)
+            # Process each batch frames
+            for t in range(len(run_result['rd_outputs'])):
+                seg_mask_rd = run_result['rd_outputs'][t]
+                seg_mask_ra = run_result['ra_outputs'][t]
+                rd_frame = run_result['rd_data'][t]
+                ra_frame = run_result['ra_data'][t]
 
-        # Process each frame
-        for t in range(len(frame_dataloader)):
-            seg_mask_rd = run_result['rd_outputs'][t]
-            seg_mask_ra = run_result['ra_outputs'][t]
-            rd_frame = run_result['rd_data'][t]
-            ra_frame = run_result['ra_data'][t]
+                plot_image_3D(seg_mask_ra)
+                plot_image_2D(torch.argmax(
+                    torch.Tensor(seg_mask_rd), axis=0).numpy())
 
-            # Detect objects from segmentation mask
-            detections_rd = detect_objects(seg_mask_rd, min_area=50)
-            detections_ra = detect_objects(seg_mask_ra, min_area=50)
+                # Detect objects from segmentation mask
+                detections_rd = detect_objects(seg_mask_rd, min_area=50)
+                detections_ra = detect_objects(seg_mask_ra, min_area=50)
 
-            # # Update tracker with detections; get active tracks
-            # active_tracks = tracker.update(detections)
-            #
-            # # Print active track IDs
-            # active_ids = [track.track_id for track in active_tracks]
-            # print(f"Frame {t}: {len(detections)} detections, Active track IDs: {active_ids}")
-            #
-            # # Optional: If radar point data is available, assign points to tracks here
-            #
-            # # Visualize the RD and RA matrices with bounding boxes from segmentation mask
-            # plot_rd_ra_with_bboxes(rd_frame, ra_frame, seg_mask, min_area=50)
+                # # Update tracker with detections; get active tracks
+                # active_tracks = tracker.update(detections)
+                #
+                # # Print active track IDs
+                # active_ids = [track.track_id for track in active_tracks]
+                # print(f"Frame {t}: {len(detections)} detections, Active track IDs: {active_ids}")
+                #
+                # # Optional: If radar point data is available, assign points to tracks here
+                #
+                # # Visualize the RD and RA matrices with bounding boxes from segmentation mask
+                # plot_rd_ra_with_bboxes(rd_frame, ra_frame, seg_mask, min_area=50)
 
-        print("Tracking complete.")
-    print(f"Finished processing sequence {i + 1}/{len(seq_testloader)}")
+            print("Tracking complete.")
+        print(f"Finished processing sequence {i + 1}/{len(seq_testloader)}")
 
 
 
