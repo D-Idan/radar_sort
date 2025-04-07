@@ -92,14 +92,18 @@ def test_model(cfg=cfg):
                 seg_pred_ra = normalize(run_result['ra_outputs'][t], signal_type='range_angle', norm_type='local')
                 seg_mask_rd = torch.argmax(seg_pred_rd, dim=0)
                 seg_mask_ra = torch.argmax(seg_pred_ra, dim=0)
-                rd_frame = run_result['rd_data'][t]
-                ra_frame = run_result['ra_data'][t]
+
+                gt_ra = torch.argmax(run_result['ra_mask'][t], dim=0)
+                gt_rd = torch.argmax(run_result['rd_mask'][t], dim=0)
+
+                rd_frame_input = run_result['rd_data'][t]
+                ra_frame_input = run_result['ra_data'][t]
 
 
 
-                # # Detect objects from segmentation mask
-                # detections_rd = detect_objects(seg_mask_rd, min_area=50)
-                # detections_ra = detect_objects(seg_mask_ra, min_area=50)
+                # Detect objects from segmentation mask
+                detections_rd = detect_objects(seg_mask_rd, min_area=50)
+                detections_ra = detect_objects(seg_mask_ra, min_area=50)
 
                 # # Update tracker with detections; get active tracks
                 # active_tracks = tracker.update(detections)
