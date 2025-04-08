@@ -9,13 +9,15 @@ from torch.utils.data import DataLoader
 import sys
 from pathlib import Path
 
+from radar_nextstop.utils_nextstop import plot_rd_ra_with_bboxes
+
 # Get the current file's directory and move up to the project's root
 ROOT_DIR = Path(__file__).resolve().parents[1]
 # Add the root directory to sys.path
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from radar_nextstop.visualize_radar_nextsort import plot_image_2D, plot_image_RGB
+from radar_nextstop.visualize_radar_nextsort import plot_image_2D, plot_image_RGB, visualize_mask_and_bboxes
 from radar_nextstop.object_detector import detect_objects
 from radar_nextstop.track_manager import TrackManager
 from utils.paths_collector import Paths
@@ -99,23 +101,28 @@ def test_model(cfg=cfg):
                 rd_frame_input = run_result['rd_data'][t]
                 ra_frame_input = run_result['ra_data'][t]
 
-
+                # # Visualize the mask with bounding boxes (only show objects above a minimal area)
+                # visualize_mask_and_bboxes(seg_mask_rd, min_area=10)
 
                 # Detect objects from segmentation mask
                 detections_rd = detect_objects(seg_mask_rd, min_area=50)
                 detections_ra = detect_objects(seg_mask_ra, min_area=50)
 
-                # # Update tracker with detections; get active tracks
-                # active_tracks = tracker.update(detections)
-                #
-                # # Print active track IDs
-                # active_ids = [track.track_id for track in active_tracks]
-                # print(f"Frame {t}: {len(detections)} detections, Active track IDs: {active_ids}")
-                #
-                # # Optional: If radar point data is available, assign points to tracks here
-                #
-                # # Visualize the RD and RA matrices with bounding boxes from segmentation mask
-                # plot_rd_ra_with_bboxes(rd_frame, ra_frame, seg_mask, min_area=50)
+                # Update tracker with detections; get active tracks
+                if detections_ra:
+                    # # Visualize the mask with bounding boxes (only show objects above a minimal area)
+                    visualize_mask_and_bboxes(seg_mask_ra, min_area=10)
+                    # Convert detections to the format expected by the tracker
+                    active_tracks = tracker.update(detections_ra)
+
+                    # Print active track IDs
+                    active_ids = [track.track_id for track in active_tracks]
+                    print(f"Frame {t}: {len(detections_ra)} detections, Active track IDs: {active_ids}")
+
+                    # Optional: If radar point data is available, assign points to tracks here
+
+                    # Visualize the RD and RA matrices with bounding boxes from segmentation mask
+                    plot_rd_ra_with_bboxes(rd_frame_input, ra_frame_input, seg_mask_ra, min_area=50)
 
             print("Tracking complete.")
         print(f"Finished processing sequence {i + 1}/{len(seq_testloader)}")

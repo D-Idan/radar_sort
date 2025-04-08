@@ -4,6 +4,7 @@ import matplotlib.patches as mpatches
 import numpy as np
 import torch
 from fontTools.unicodedata import block
+from matplotlib import patches
 
 from mvrss.utils.functions import mask_to_img
 from radar_nextstop.object_detector import create_bounding_boxes
@@ -236,3 +237,56 @@ def plot_image_RGB(map, save_path=None):
         plt.close()
     else:
         plt.show()
+
+
+def visualize_mask_and_bboxes(seg_mask: torch.Tensor | np.ndarray, min_area: int = 0,
+                              mask_cmap: str = 'jet', alpha: float = 0.5):
+    """
+    Visualize the segmentation mask with overlaid bounding boxes.
+
+    Args:
+        seg_mask (torch.Tensor or np.ndarray): The segmentation mask. If multi-channel,
+            the function will take the argmax over channels.
+        min_area (int): Minimum area to consider for bounding box extraction.
+        mask_cmap (str): Colormap to use for the mask overlay.
+        alpha (float): Transparency for the mask overlay.
+    """
+    # Get bounding boxes from the mask
+    bboxes = create_bounding_boxes(seg_mask, min_area)
+
+    # Process mask for visualization:
+    # If a tensor, convert to numpy
+    if isinstance(seg_mask, torch.Tensor):
+        seg_mask = seg_mask.cpu().numpy()
+
+    # If multi-channel (e.g., shape: (C, H, W) or (H, W, C) with C > 1), reduce to single channel
+    if seg_mask.ndim == 3:
+        # Check if the channel is the first dimension (C, H, W)
+        if seg_mask.shape[0] < seg_mask.shape[-1]:
+            seg_mask_vis = np.argmax(seg_mask, axis=0)
+        else:  # Otherwise assume channels are in the last dimension
+            seg_mask_vis = np.argmax(seg_mask, axis=-1)
+    else:
+        seg_mask_vis = seg_mask
+
+    # Create the figure
+    plt.figure(figsize=(10, 10))
+    # plt.imshow(mask_to_img(seg_mask_vis), cmap=mask_cmap, alpha=alpha)
+    plt.imshow(seg_mask_vis, cmap=mask_cmap, alpha=alpha)
+    plt.title("Segmentation Mask with Bounding Boxes")
+    ax = plt.gca()
+
+    # Overlay bounding boxes for each class
+    for class_idx, boxes in bboxes.items():
+        for bbox in boxes:
+            min_row, min_col, max_row, max_col = bbox
+            width = max_col - min_col
+            height = max_row - min_row
+            rect = patches.Rectangle((min_col, min_row), width, height,
+                                     fill=False, edgecolor='red', linewidth=2)
+            ax.add_patch(rect)
+            ax.text(min_col, min_row, f'Class {class_idx}', fontsize=8,
+                    color='white', bbox=dict(facecolor='black', alpha=0.5))
+
+    plt.axis('off')
+    plt.show()

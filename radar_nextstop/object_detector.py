@@ -2,23 +2,37 @@
 # Adjust the thresholding, area filtering, and coordinate conversions as needed.
 
 import torch
+import torch.nn.functional as F
 import numpy as np
 from skimage.measure import label, regionprops
 from utils_nextstop import bbox_tuple_to_center_size
 
-def create_bounding_boxes(seg_mask: torch.Tensor | np.ndarray, min_area: int = 0):
+def create_bounding_boxes(seg_mask: torch.Tensor | np.ndarray, min_area: int = 0,
+                          num_classes: int = 4, skip_class: int = 0) -> dict:
     """
     Create bounding boxes from a multi-channel segmentation mask.
     Returns a dict mapping class index to a list of bounding box tuples:
       (min_row, min_col, max_row, max_col)
     """
+
     if not isinstance(seg_mask, torch.Tensor):
         seg_mask = torch.tensor(seg_mask)
+
+    if seg_mask.ndim == 3:
+        # If the input is a 3D tensor, we assume it has shape (C, H, W)
+        num_classes, H, W = seg_mask.shape
+        seg_mask = torch.argmax(seg_mask, dim=0)
+
+    # add a channel dimension with values according to the argmax
+    seg_mask = F.one_hot(seg_mask.to(torch.long), num_classes=num_classes)  # Shape: (H, W, C)
+    seg_mask = seg_mask.permute(2, 0, 1).float()  # Shape: (C, H, W)
+
     seg_mask = seg_mask.cpu().numpy() if seg_mask.is_cuda else seg_mask.numpy()
-    C, H, W = seg_mask.shape
     bboxes = {}
-    for class_idx in range(C):
-        binary_mask = seg_mask[class_idx] > 0.5
+    for class_idx in range(num_classes):
+        if class_idx == skip_class:
+            continue
+        binary_mask = seg_mask[class_idx]
         labeled_mask = label(binary_mask)
         props = regionprops(labeled_mask)
         bboxes[class_idx] = [prop.bbox for prop in props if prop.area >= min_area]
