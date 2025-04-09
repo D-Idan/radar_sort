@@ -17,7 +17,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from radar_nextstop.visualize_radar_nextsort import plot_image_2D, plot_image_RGB, visualize_mask_and_bboxes
+from radar_nextstop.visualize_radar_nextsort import plot_image_2D, plot_image_RGB, visualize_mask_and_bboxes, \
+    visualize_radar_nextsort, plot_combined_results
 from radar_nextstop.object_detector import detect_objects
 from radar_nextstop.track_manager import TrackManager
 from utils.paths_collector import Paths
@@ -80,7 +81,13 @@ def test_model(cfg=cfg):
     for i, sequence_data in enumerate(seq_testloader):
         frame_dataloader = load_carrada_frame_dataloader(cfg, seq_name=sequence_data[0], seq=sequence_data[1],
                                                           split='Train', add_temp=False)
-        for ind_batch, batch_frames in enumerate(frame_dataloader):
+        cfg_bb = cfg.copy()
+        cfg_bb['annot_type'] = 'box'
+        frame_dataloader_bb = load_carrada_frame_dataloader(cfg_bb, seq_name=sequence_data[0], seq=sequence_data[1],
+                                                            split='Train', add_temp=False)
+
+
+        for (ind_batch, batch_frames), (_, batch_frames_bb) in zip(enumerate(frame_dataloader), enumerate(frame_dataloader_bb)):
             if cfg['model'] == 'mvnet':
                 run_result = tester.predict_step(
                     model, batch_frames, save_plot_path=None)
@@ -111,7 +118,8 @@ def test_model(cfg=cfg):
                 # Update tracker with detections; get active tracks
                 if detections_ra:
                     # # Visualize the mask with bounding boxes (only show objects above a minimal area)
-                    visualize_mask_and_bboxes(seg_mask_ra, min_area=10)
+                    # visualize_mask_and_bboxes(seg_mask_ra, min_area=10)
+
                     # Convert detections to the format expected by the tracker
                     active_tracks = tracker.update(detections_ra)
 
@@ -122,7 +130,19 @@ def test_model(cfg=cfg):
                     # Optional: If radar point data is available, assign points to tracks here
 
                     # Visualize the RD and RA matrices with bounding boxes from segmentation mask
-                    plot_rd_ra_with_bboxes(rd_frame_input, ra_frame_input, seg_mask_ra, min_area=50)
+                    visualize_mask_and_bboxes(seg_mask_ra, min_area=10)
+                    visualize_mask_and_bboxes(gt_ra, min_area=10)
+                    # Prepare inputs
+                    vis_data = visualize_radar_nextsort(
+                        **run_result,
+                        nb_classes=cfg['nb_classes'],
+                        output_path=None,
+                        frame_num=t,
+                        camera_image=None
+                    )
+
+                    # Pass directly to plot_combined_results
+                    plot_combined_results(**vis_data)
 
             print("Tracking complete.")
         print(f"Finished processing sequence {i + 1}/{len(seq_testloader)}")

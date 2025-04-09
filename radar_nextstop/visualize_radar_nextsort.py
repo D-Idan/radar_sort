@@ -123,6 +123,8 @@ def plot_radar_comparison(ax, matrix, mask, matrix_type,
     # Convert mask to numpy if needed
     if torch.is_tensor(mask):
         mask = mask.cpu().numpy()
+    if torch.is_tensor(matrix):
+        matrix = matrix.cpu().numpy()
 
     # Generate bounding boxes
     bboxes = create_bounding_boxes(mask, min_area=min_area)
