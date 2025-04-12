@@ -271,24 +271,49 @@ def visualize_mask_and_bboxes(seg_mask: torch.Tensor | np.ndarray, min_area: int
     else:
         seg_mask_vis = seg_mask
 
+    height, width = seg_mask_vis.shape
+
+    # Determine x-axis range based on image width
+    y_range = (0, 50)
+
+    if width == 256:
+        x_range = (-90, 90)
+        x_label = 'Angle (degrees)'
+    elif width == 64:
+        x_range = (13.5, -13.5)
+        x_label = 'Doppler (m/s)'
+    else:
+        x_range = (0, width)
+        x_label = 'X'
+
     # Create the figure
     plt.figure(figsize=(10, 10))
     # plt.imshow(mask_to_img(seg_mask_vis), cmap=mask_cmap, alpha=alpha)
-    plt.imshow(seg_mask_vis, cmap=mask_cmap, alpha=alpha)
+    plt.imshow(mask_to_img(seg_mask_vis), cmap=mask_cmap, alpha=alpha, extent=(x_range[0], x_range[1], y_range[0], y_range[1]))
+
     plt.title("Segmentation Mask with Bounding Boxes")
     ax = plt.gca()
+    ax.set_aspect('auto')
+    ax.set_xlabel(x_label)
+    ax.set_ylabel('Range (m)')
 
     # Overlay bounding boxes for each class
     for class_idx, boxes in bboxes.items():
         for bbox in boxes:
             min_row, min_col, max_row, max_col = bbox
-            width = max_col - min_col
-            height = max_row - min_row
-            rect = patches.Rectangle((min_col, min_row), width, height,
+            # Convert the pixel coordinates to physical coordinates
+            x_scale = (x_range[1] - x_range[0]) / width
+            y_scale = (y_range[0] - y_range[1]) / height
+            phys_min_x = x_range[0] + min_col * x_scale
+            phys_min_y = y_range[1] + min_row * y_scale
+            phys_width = (max_col - min_col) * x_scale
+            phys_height = (max_row - min_row) * y_scale
+
+            rect = patches.Rectangle((phys_min_x, phys_min_y), phys_width, phys_height,
                                      fill=False, edgecolor='red', linewidth=2)
             ax.add_patch(rect)
-            ax.text(min_col, min_row, f'Class {class_idx}', fontsize=8,
+            ax.text(phys_min_x, phys_min_y, f'Class {class_idx}', fontsize=8,
                     color='white', bbox=dict(facecolor='black', alpha=0.5))
 
-    plt.axis('off')
+    # plt.axis('off')
     plt.show()

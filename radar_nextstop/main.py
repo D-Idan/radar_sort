@@ -81,13 +81,16 @@ def test_model(cfg=cfg):
     for i, sequence_data in enumerate(seq_testloader):
         frame_dataloader = load_carrada_frame_dataloader(cfg, seq_name=sequence_data[0], seq=sequence_data[1],
                                                           split='Train', add_temp=False)
-        cfg_bb = cfg.copy()
-        cfg_bb['annot_type'] = 'box'
-        frame_dataloader_bb = load_carrada_frame_dataloader(cfg_bb, seq_name=sequence_data[0], seq=sequence_data[1],
-                                                            split='Train', add_temp=False)
 
+        # cfg_bb = cfg.copy()
+        # cfg_bb['annot_type'] = 'box'
+        # frame_dataloader_bb = load_carrada_frame_dataloader(cfg_bb, seq_name=sequence_data[0], seq=sequence_data[1],
+        #                                                     split='Train', add_temp=False)
+        #
+        #
+        # for (ind_batch, batch_frames), (_, batch_frames_bb) in zip(enumerate(frame_dataloader), enumerate(frame_dataloader_bb)):
 
-        for (ind_batch, batch_frames), (_, batch_frames_bb) in zip(enumerate(frame_dataloader), enumerate(frame_dataloader_bb)):
+        for ind_batch, batch_frames in enumerate(frame_dataloader):
             if cfg['model'] == 'mvnet':
                 run_result = tester.predict_step(
                     model, batch_frames, save_plot_path=None)
