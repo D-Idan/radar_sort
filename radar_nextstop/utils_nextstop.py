@@ -8,12 +8,12 @@ import matplotlib.patches as mpatches
 
 
 radar_resolution = {
-    'range_res': 0.2,      # meters per range bin
-    'azimuth_res': 0.9,    # degrees per azimuth bin
-    'doppler_res': 0.5,    # m/s per Doppler bin
+    'range_res': 50/256,      # meters per range bin
+    'azimuth_res': 180/256,    # degrees per azimuth bin
+    'doppler_res': 27/64,    # m/s per Doppler bin
     'range_offset': 2.0,    # meters
-    'fov': 120,             # degrees azimuth field-of-view
-    'max_doppler': 25,      # m/s maximum Doppler
+    'fov': 180,             # degrees azimuth field-of-view
+    'max_doppler': 13.5,      # m/s maximum Doppler
     'range_bins': 256       # number of range bins
 }
 
