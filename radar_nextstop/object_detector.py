@@ -67,9 +67,12 @@ class RadarDetection:
                 f"orient={self.orientation:.2f}, dims=({self.length:.2f}, {self.width:.2f}, {self.height:.2f}), "
                 f"score={self.score:.2f}, class={self.class_id})")
 
-def detect_objects(seg_mask, min_area=50):
+def detect_objects(seg_mask, min_area=50) -> list[RadarDetection]:
     """
     Given a segmentation mask (C x H x W), generate a list of RadarDetection objects.
+    Parameters:
+    - seg_mask: Segmentation mask (C x H x W) or (H x W) tensor.
+    - min_area: Minimum area for a bounding box to be considered a detection.
     """
     bboxes = create_bounding_boxes(seg_mask, min_area)
     detections = []

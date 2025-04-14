@@ -8,13 +8,17 @@ import matplotlib.patches as mpatches
 
 
 radar_resolution = {
-    'range_res': 50/256,      # meters per range bin
-    'azimuth_res': 180/256,    # degrees per azimuth bin
-    'doppler_res': 27/64,    # m/s per Doppler bin
-    'range_offset': 2.0,    # meters
-    'fov': 180,             # degrees azimuth field-of-view
-    'max_doppler': 13.5,      # m/s maximum Doppler
-    'range_bins': 256       # number of range bins
+    'range_res': 0.20,              # meters per range bin (given directly from paper)
+    'azimuth_res': 180/256,         # degrees per azimuth bin
+    'doppler_res': 13.43 * 2 /64,   # m/s per Doppler bin
+    'range_offset': 0.0, #2.0,      # meters
+    'fov': 180,                     # degrees azimuth field-of-view
+    'min_doppler': -13.43,          # m/s minimum Doppler
+    'max_doppler': 13.43,           # m/s maximum Doppler
+    'range_bins': 256,              # number of range bins
+    'range_max': 256 * 0.20,        # meters maximum range
+    'doppler_bins': 64,
+    'azimuth_bins': 256,
 }
 
 
@@ -31,89 +35,45 @@ def bbox_tuple_to_center_size(bbox_tuple):
     return cx, cy, width, height
 
 
-def plot_rd_ra_with_bboxes(rd_matrix, ra_matrix, seg_mask, min_area=10):
-    """
-    Plot RD and RA matrices with segmentation masks and overlay computed bounding boxes.
-    """
-    # Convert segmentation mask to bounding boxes using object_detector's method.
-    from object_detector import create_bounding_boxes
-    bboxes = create_bounding_boxes(seg_mask, min_area=min_area)
-
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-
-    # RD subplot
-    ax1 = axes[0]
-    ax1.imshow(rd_matrix.squeeze(), cmap='viridis')
-    ax1.set_title(f'RD Matrix with Bounding Boxes (min_area={min_area})')
-    seg_overlay = seg_mask.cpu().numpy().squeeze()
-    ax1.imshow(seg_overlay.transpose(1, 2, 0), alpha=0.5, cmap='jet')
-    for class_idx, boxes in bboxes.items():
-        for bbox in boxes:
-            min_row, min_col, max_row, max_col = bbox
-            width = max_col - min_col
-            height = max_row - min_row
-            rect = mpatches.Rectangle((min_col, min_row), width, height,
-                                      fill=False, edgecolor='red', linewidth=2)
-            ax1.add_patch(rect)
-            ax1.text(min_col, min_row, f'Class {class_idx}', fontsize=8,
-                     color='white', bbox=dict(facecolor='black', alpha=0.5))
-
-    # RA subplot
-    ax2 = axes[1]
-    ax2.imshow(ra_matrix.squeeze(), cmap='viridis')
-    ax2.set_title(f'RA Matrix with Bounding Boxes (min_area={min_area})')
-    seg_overlay_ra = seg_mask.cpu().numpy().squeeze()
-    ax2.imshow(seg_overlay_ra.transpose(1, 2, 0), alpha=0.5, cmap='jet')
-    for class_idx, boxes in bboxes.items():
-        for bbox in boxes:
-            min_row, min_col, max_row, max_col = bbox
-            width = max_col - min_col
-            height = max_row - min_row
-            rect = mpatches.Rectangle((min_col, min_row), width, height,
-                                      fill=False, edgecolor='red', linewidth=2)
-            ax2.add_patch(rect)
-            ax2.text(min_col, min_row, f'Class {class_idx}', fontsize=8,
-                     color='white', bbox=dict(facecolor='black', alpha=0.5))
-
-    plt.tight_layout()
-    plt.show()
-
-
-def convert_pixel_to_radar_coords(pixel_coords, radar_resolution, matrix_type='RA'):
+def convert_pixel_to_radar_coords(pixel_coords, matrix_type='RA', range_flip=False):
     """
     Convert pixel coordinates to physical radar measurements.
 
     Parameters:
-        pixel_coords (tuple): (row, column) in the radar matrix
-        radar_resolution (dict): Contains 'range_res', 'azimuth_res', 'range_offset'
+        pixel_coords (tuple): (col, row) in the radar matrix (x, y) = (col, row), y is range
         matrix_type (str): 'RA' (Range-Azimuth) or 'RD' (Range-Doppler)
+        y_flip (bool): If True, flip the y-axis (range) for visualization
 
     Returns:
         dict: Physical measurements in radar coordinates
     """
-    row, col = pixel_coords
+    col, range = pixel_coords
 
-    # Common range conversion for both RA and RD
-    range_val = (row * radar_resolution['range_res']) + radar_resolution['range_offset']
+    # Use 0.0 as default range_offset if not specified
+    range_val = (range * radar_resolution['range_res']) + radar_resolution["range_offset"]
+    if range_flip:
+        range_val = radar_resolution['range_max'] - range_val
 
     if matrix_type == 'RA':
-        azimuth_val = col * radar_resolution['azimuth_res'] - (radar_resolution['fov'] / 2)
+        # Get FOV (default to 180 if not specified) to center azimuth
+        fov = radar_resolution.get('fov', 180)
+        azimuth_val = col * radar_resolution['azimuth_res'] - (fov / 2)
         return {'range': range_val, 'azimuth': azimuth_val}
 
     elif matrix_type == 'RD':
-        doppler_val = col * radar_resolution['doppler_res']
+        doppler_val = col * radar_resolution['doppler_res'] + radar_resolution['min_doppler']
         return {'range': range_val, 'doppler': doppler_val}
 
+    # Handle incorrect matrix types
     raise ValueError(f"Invalid matrix type: {matrix_type}. Use 'RA' or 'RD'")
 
 
-def convert_bbox_to_radar_coords(bbox, radar_resolution, matrix_type='RA'):
+def convert_bbox_to_radar_coords(bbox, matrix_type='RA'):
     """
     Convert bounding box from pixel coordinates to radar physical coordinates.
 
     Parameters:
         bbox (tuple): (min_row, min_col, max_row, max_col)
-        radar_resolution (dict): Radar resolution parameters
         matrix_type (str): 'RA' or 'RD'
 
     Returns:
@@ -122,16 +82,30 @@ def convert_bbox_to_radar_coords(bbox, radar_resolution, matrix_type='RA'):
     min_row, min_col, max_row, max_col = bbox
 
     # Convert corners
-    tl = convert_pixel_to_radar_coords((min_row, min_col), radar_resolution, matrix_type)
-    br = convert_pixel_to_radar_coords((max_row, max_col), radar_resolution, matrix_type)
+    top_left = convert_pixel_to_radar_coords((min_row, min_col), matrix_type)
+    bottom_right = convert_pixel_to_radar_coords((max_row, max_col), matrix_type)
+
+    # Select label and resolution key depending on matrix type
+    if matrix_type.upper() == 'RA':
+        angle_key = 'azimuth'
+        res_key = 'azimuth_res'
+    elif matrix_type.upper() == 'RD':
+        angle_key = 'doppler'
+        res_key = 'doppler_res'
+    else:
+        raise ValueError(f"Invalid matrix_type: {matrix_type}. Use 'RA' or 'RD'.")
+
+    # Compute physical size
+    width = (max_col - min_col) * radar_resolution[res_key]
+    height = (max_row - min_row) * radar_resolution['range_res']
 
     return {
-        'range_min': tl['range'],
-        'range_max': br['range'],
-        'angle_min': tl['azimuth' if matrix_type == 'RA' else 'doppler'],
-        'angle_max': br['azimuth' if matrix_type == 'RA' else 'doppler'],
-        'width': (max_col - min_col) * radar_resolution['azimuth_res' if matrix_type == 'RA' else 'doppler_res'],
-        'height': (max_row - min_row) * radar_resolution['range_res']
+        'range_min': top_left['range'],
+        'range_max': bottom_right['range'],
+        f'{angle_key}_min': top_left[angle_key],
+        f'{angle_key}_max': bottom_right[angle_key],
+        'width': width,
+        'height': height
     }
 
 

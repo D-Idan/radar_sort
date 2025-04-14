@@ -105,10 +105,16 @@ class CarradaDataset(Dataset):
         rd_matrices = list()
         ra_matrices = list()
         ad_matrices = list()
+        ra_paths = list()
+
         rd_mask = np.load(os.path.join(self.path_to_annots, init_frame_name,
                                        'range_doppler.npy'))
         ra_mask = np.load(os.path.join(self.path_to_annots, init_frame_name,
                                        'range_angle.npy'))
+        ra_paths.append(os.path.join(self.path_to_frames,
+                                     'range_angle_processed' if self.process_signal else 'range_angle_raw',
+                                     init_frame_name + '.npy'))
+
         for frame_name in frame_names:
             if self.process_signal:
                 rd_matrix = np.load(os.path.join(self.path_to_frames,
@@ -134,6 +140,8 @@ class CarradaDataset(Dataset):
             rd_matrices.append(rd_matrix)
             ra_matrices.append(ra_matrix)
             ad_matrices.append(ad_matrix)
+
+
 
         # Apply the same transfo to all representations
         if np.random.uniform(0, 1) > 0.5:
@@ -184,7 +192,9 @@ class CarradaDataset(Dataset):
 
         frame = {'rd_matrix': rd_frame['matrix'], 'rd_mask': rd_frame['mask'],
                  'ra_matrix': ra_frame['matrix'], 'ra_mask': ra_frame['mask'],
-                 'ad_matrix': ad_frame['matrix']}
+                 'ad_matrix': ad_frame['matrix'],
+                 'paths_ra': ra_paths[0],
+                 }
 
         return frame
 

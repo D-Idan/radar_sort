@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 import sys
 from pathlib import Path
 
-from radar_nextstop.utils_nextstop import plot_rd_ra_with_bboxes
+from radar_nextstop.utils_nextstop import plot_rd_ra_with_bboxes, convert_pixel_to_radar_coords
 
 # Get the current file's directory and move up to the project's root
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -114,14 +114,19 @@ def test_model(cfg=cfg):
                 # # Visualize the mask with bounding boxes (only show objects above a minimal area)
                 # visualize_mask_and_bboxes(seg_mask_rd, min_area=10)
 
-                # Detect objects from segmentation mask
-                detections_rd = detect_objects(seg_mask_rd, min_area=50)
+                # Detect objects from segmentation mask for RA
                 detections_ra = detect_objects(seg_mask_ra, min_area=50)
+
+
 
                 # Update tracker with detections; get active tracks
                 if detections_ra:
+                    detections_rd = detect_objects(seg_mask_rd, min_area=50)
+                    cx = detections_rd[0].cx
+                    cy = detections_rd[0].cy
+                    print(convert_pixel_to_radar_coords([cx, cy], 'RD', range_flip=True))
                     # # Visualize the mask with bounding boxes (only show objects above a minimal area)
-                    # visualize_mask_and_bboxes(seg_mask_ra, min_area=10)
+                    visualize_mask_and_bboxes(seg_mask_rd, min_area=10)
 
                     # Convert detections to the format expected by the tracker
                     active_tracks = tracker.update(detections_ra)

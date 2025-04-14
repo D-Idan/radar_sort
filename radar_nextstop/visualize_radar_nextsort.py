@@ -317,3 +317,61 @@ def visualize_mask_and_bboxes(seg_mask: torch.Tensor | np.ndarray, min_area: int
 
     # plt.axis('off')
     plt.show()
+
+
+def visualize_bbox_conversion(bbox, radar_coords, matrix_type='RA', seg_mask=None, class_id=None, detection_id=0):
+    """
+    Visualizes a bounding box in both pixel coordinates and radar coordinates.
+
+    Parameters:
+        bbox (tuple): (min_row, min_col, max_row, max_col) - pixel coordinates
+        radar_coords (dict): Output from convert_bbox_to_radar_coords
+        matrix_type (str): 'RA' or 'RD'
+        seg_mask (ndarray): Optional. Used to show the bounding box over the original mask.
+        class_id (int): Optional class ID for labeling.
+        detection_id (int): Optional ID for differentiating detections.
+    """
+
+    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+
+    # ----------------
+    # 1. Pixel space
+    # ----------------
+    if seg_mask is not None:
+        axs[0].imshow(seg_mask, cmap='gray')
+    else:
+        axs[0].set_xlim(0, 256)
+        axs[0].set_ylim(256, 0)
+
+    min_row, min_col, max_row, max_col = bbox
+    width = max_col - min_col
+    height = max_row - min_row
+    rect = patches.Rectangle((min_col, min_row), width, height,
+                             linewidth=2, edgecolor='lime', facecolor='none')
+    axs[0].add_patch(rect)
+    axs[0].set_title(f'Detection #{detection_id} - Pixel Space\nClass {class_id}')
+    axs[0].set_xlabel("Column (Azimuth/Doppler)")
+    axs[0].set_ylabel("Row (Range)")
+
+    # ----------------
+    # 2. Radar Coordinate Space
+    # ----------------
+    x_min = radar_coords['angle_min']
+    x_max = radar_coords['angle_max']
+    y_min = radar_coords['range_min']
+    y_max = radar_coords['range_max']
+    radar_width = x_max - x_min
+    radar_height = y_max - y_min
+
+    rect2 = patches.Rectangle((x_min, y_min), radar_width, radar_height,
+                              linewidth=2, edgecolor='orange', facecolor='none')
+    axs[1].add_patch(rect2)
+
+    axs[1].set_xlim(x_min - radar_width * 0.2, x_max + radar_width * 0.2)
+    axs[1].set_ylim(y_max + radar_height * 0.2, y_min - radar_height * 0.2)  # flip y-axis for range
+    axs[1].set_title(f'Detection #{detection_id} - Radar Coordinates\nClass {class_id}')
+    axs[1].set_xlabel("Azimuth (deg)" if matrix_type.upper() == 'RA' else "Doppler (m/s)")
+    axs[1].set_ylabel("Range (m)")
+
+    plt.tight_layout()
+    plt.show()
