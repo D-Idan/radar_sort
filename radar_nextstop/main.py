@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 import sys
 from pathlib import Path
 
+from data.carrada.images import paths_npy2jpg
 from radar_nextstop.utils_nextstop import plot_rd_ra_with_bboxes, convert_pixel_to_radar_coords
 
 # Get the current file's directory and move up to the project's root
@@ -100,6 +101,8 @@ def test_model(cfg=cfg):
 
             # Process each batch frames
             for t in range(len(run_result['rd_outputs'])):
+                path_rel_img = paths_npy2jpg(batch_frames['paths_ra'][t])
+
                 seg_pred_rd = normalize(run_result['rd_outputs'][t], signal_type='range_doppler', norm_type='local')
                 seg_pred_ra = normalize(run_result['ra_outputs'][t], signal_type='range_angle', norm_type='local')
                 seg_mask_rd = torch.argmax(seg_pred_rd, dim=0)
@@ -111,8 +114,14 @@ def test_model(cfg=cfg):
                 rd_frame_input = run_result['rd_data'][t]
                 ra_frame_input = run_result['ra_data'][t]
 
-                # # Visualize the mask with bounding boxes (only show objects above a minimal area)
-                # visualize_mask_and_bboxes(seg_mask_rd, min_area=10)
+                if cfg['transformations'] == 'flip':
+                    ra_frame_input = torch.flip(ra_frame_input, [1])
+                    gt_ra = torch.flip(gt_ra, [0])
+                    seg_mask_ra = torch.flip(seg_mask_ra, [0])
+                    seg_pred_ra = torch.flip(seg_pred_ra, [1])
+
+
+
 
                 # Detect objects from segmentation mask for RA
                 detections_ra = detect_objects(seg_mask_ra, min_area=50)
@@ -126,7 +135,7 @@ def test_model(cfg=cfg):
                     cy = detections_rd[0].cy
                     print(convert_pixel_to_radar_coords([cx, cy], 'RD', range_flip=True))
                     # # Visualize the mask with bounding boxes (only show objects above a minimal area)
-                    visualize_mask_and_bboxes(seg_mask_rd, min_area=10)
+                    # visualize_mask_and_bboxes(seg_mask_rd, min_area=10)
 
                     # Convert detections to the format expected by the tracker
                     active_tracks = tracker.update(detections_ra)
@@ -137,16 +146,20 @@ def test_model(cfg=cfg):
 
                     # Optional: If radar point data is available, assign points to tracks here
 
-                    # Visualize the RD and RA matrices with bounding boxes from segmentation mask
-                    visualize_mask_and_bboxes(seg_mask_ra, min_area=10)
-                    visualize_mask_and_bboxes(gt_ra, min_area=10)
                     # Prepare inputs
                     vis_data = visualize_radar_nextsort(
-                        **run_result,
+                        rd_data=rd_frame_input,
+                        ra_data=ra_frame_input,
+                        rd_mask=gt_rd,
+                        ra_mask=gt_ra,
+                        rd_pred_masks=seg_mask_rd,
+                        ra_pred_masks=seg_mask_ra,
                         nb_classes=cfg['nb_classes'],
                         output_path=None,
-                        frame_num=t,
-                        camera_image=None
+                        camera_image_path=path_rel_img['img_path'],
+                        frame_num=path_rel_img['img_num'],
+                        frame_num_in_seq=path_rel_img['img_seq'],
+
                     )
 
                     # Pass directly to plot_combined_results

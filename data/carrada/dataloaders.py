@@ -423,9 +423,12 @@ class VFlip:
 
     def __call__(self, frame):
         matrix, mask = frame['matrix'], frame['mask']
-        matrix = np.flip(matrix, axis=2).copy()
-        if len(mask.shape) == 3:
-            mask = np.flip(mask, axis=2).copy()
-        elif len(mask.shape) == 4:
-            mask = np.flip(mask, axis=3).copy()
-        return {'matrix': matrix, 'mask': mask}
+        v_flip(matrix, mask)
+
+def v_flip(matrix, mask):
+    matrix = np.flip(matrix, axis=2).copy()
+    if len(mask.shape) == 3:
+        mask = np.flip(mask, axis=2).copy()
+    elif len(mask.shape) == 4:
+        mask = np.flip(mask, axis=3).copy()
+    return {'matrix': matrix, 'mask': mask}

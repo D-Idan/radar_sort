@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
@@ -40,131 +42,63 @@ def plot_matrix(ax, matrix, mask, min_area, title):
                     color='white', bbox=dict(facecolor='black', alpha=0.5))
 
 
-def plot_combined_results(rd_matrix, ra_matrix,
-                         rd_mask_gt, ra_mask_gt,
-                         rd_mask_pred, ra_mask_pred,
-                         output_path=None, frame_num=None, frame_num_in_seq=1,
-                         camera_image=None, min_area=10,
-                         figsize=(24, 16)):
-    """
-    Plots ground truth vs predictions with camera image in a unified view
-    Compatible with outputs from visualize_radar_nextsort
-    """
-    # Create figure with grid layout
-    fig = plt.figure(figsize=figsize)
-
-    if camera_image:
-        nrows, ncols = 3, 2
-        height_ratios = [2, 2, 1.5]  # 3 ratios when camera image exists
-    else:
-        nrows, ncols = 2, 2
-        height_ratios = [1, 1]  # 2 equal ratios when no camera image
-
-    gs = fig.add_gridspec(nrows=nrows, ncols=ncols,
-                        height_ratios=height_ratios,
-                        width_ratios=[1, 1],
-                        hspace=0.4, wspace=0.15)
-
-    # Create subplot axes
-    ax_gt_rd = fig.add_subplot(gs[0, 0])  # Ground Truth RD
-    ax_gt_ra = fig.add_subplot(gs[1, 0])  # Ground Truth RA
-    ax_pred_rd = fig.add_subplot(gs[0, 1])  # Predicted RD
-    ax_pred_ra = fig.add_subplot(gs[1, 1])  # Predicted RA
-    if camera_image:
-        ax_cam = fig.add_subplot(gs[2, :])    # Camera view
-
-    # Plot RD matrices
-    plot_radar_comparison(ax_gt_rd, rd_matrix, rd_mask_gt,
-                         matrix_type='RD', title='Ground Truth RD',
-                         min_area=min_area, color='lime')
-    plot_radar_comparison(ax_pred_rd, rd_matrix, rd_mask_pred,
-                         matrix_type='RD', title='Predicted RD',
-                         min_area=min_area, color='red')
-
-    # Plot RA matrices
-    plot_radar_comparison(ax_gt_ra, ra_matrix, ra_mask_gt,
-                         matrix_type='RA', title='Ground Truth RA',
-                         min_area=min_area, color='lime')
-    plot_radar_comparison(ax_pred_ra, ra_matrix, ra_mask_pred,
-                         matrix_type='RA', title='Predicted RA',
-                         min_area=min_area, color='red')
-
-    # Add camera image if provided
-    if camera_image is not None:
-        if isinstance(camera_image, str):
-            camera_image = plt.imread(camera_image)
-        ax_cam.imshow(camera_image)
-        ax_cam.axis('off')
-        ax_cam.set_title('Camera View', fontsize=12)
-
-    # Save or display results
-    if output_path:
-        os.makedirs(output_path, exist_ok=True)
-        save_path = os.path.join(output_path, f'frame_{frame_num_in_seq}_combined.png')
-        plt.savefig(save_path, bbox_inches='tight', dpi=150)
-        plt.close()
-        print(f"Saved combined results to: {save_path}")
-    else:
-        plt.tight_layout()
-        plt.show()
-
-def plot_radar_comparison(ax, matrix, mask, matrix_type,
-                         title, min_area, color):
-    """Helper function to plot individual radar matrix comparison"""
-    # Flip RD matrices for correct orientation
-    if matrix_type == 'RD':
-        matrix = torch.flip(matrix, dims=[0])
-        mask = torch.flip(mask, dims=[-2, -1])
-        # Get current axis limits
-        x_center = matrix.shape[1] // 2
-        ax.set_xticks([0, x_center, matrix.shape[1] - 1])
-        ax.set_xticklabels([f'-{radar_resolution["max_doppler"]}', '0', f'+{radar_resolution["max_doppler"]}'])
-
-    # Convert mask to numpy if needed
-    if torch.is_tensor(mask):
-        mask = mask.cpu().numpy()
-    if torch.is_tensor(matrix):
-        matrix = matrix.cpu().numpy()
-
-    # Generate bounding boxes
-    bboxes = create_bounding_boxes(mask, min_area=min_area)
-
-    # Plot base matrix
-    ax.imshow(matrix.squeeze(), cmap='viridis')
-    ax.set_title(title, fontsize=10)
-
-    # Add mask overlay
-    mask_overlay = mask.squeeze().transpose(1, 2, 0)
-    ax.imshow(mask_overlay, alpha=0.5, cmap='jet')
-
-    # Add bounding boxes
-    for class_idx, boxes in bboxes.items():
-        for bbox in boxes:
-            min_row, min_col, max_row, max_col = bbox
-            width = max_col - min_col
-            height = max_row - min_row
-            rect = mpatches.Rectangle(
-                (min_col, min_row), width, height,
-                fill=False, edgecolor=color, linewidth=1.5
-            )
-            ax.add_patch(rect)
-            ax.text(min_col, min_row, f'C{class_idx}', fontsize=8,
-                    color='white', bbox=dict(facecolor='black', alpha=0.5))
-
-    # Set axis labels
-    if matrix_type == 'RA':
-        ax.set_xlabel('Azimuth (deg)', fontsize=8)
-        ax.set_ylabel('Range (m)', fontsize=8)
-    else:
-        ax.set_xlabel('Doppler (m/s)', fontsize=8)
-        ax.set_ylabel('Range (m)', fontsize=8)
-    ax.tick_params(axis='both', labelsize=8)
+# def plot_radar_comparison(ax, matrix, mask, matrix_type,
+#                          title, min_area, color):
+#     """Helper function to plot individual radar matrix comparison"""
+#     # Flip RD matrices for correct orientation
+#     if matrix_type == 'RD':
+#         matrix = torch.flip(matrix, dims=[0])
+#         mask = torch.flip(mask, dims=[-2, -1])
+#         # Get current axis limits
+#         x_center = matrix.shape[1] // 2
+#         ax.set_xticks([0, x_center, matrix.shape[1] - 1])
+#         ax.set_xticklabels([f'-{radar_resolution["max_doppler"]}', '0', f'+{radar_resolution["max_doppler"]}'])
+#
+#     # Convert mask to numpy if needed
+#     if torch.is_tensor(mask):
+#         mask = mask.cpu().numpy()
+#     if torch.is_tensor(matrix):
+#         matrix = matrix.cpu().numpy()
+#
+#     # Generate bounding boxes
+#     bboxes = create_bounding_boxes(mask, min_area=min_area)
+#
+#     # Plot base matrix
+#     ax.imshow(matrix.squeeze(), cmap='viridis')
+#     ax.set_title(title, fontsize=10)
+#
+#     # Add mask overlay
+#     mask_overlay = mask.squeeze().transpose(1, 2, 0)
+#     ax.imshow(mask_overlay, alpha=0.5, cmap='jet')
+#
+#     # Add bounding boxes
+#     for class_idx, boxes in bboxes.items():
+#         for bbox in boxes:
+#             min_row, min_col, max_row, max_col = bbox
+#             width = max_col - min_col
+#             height = max_row - min_row
+#             rect = mpatches.Rectangle(
+#                 (min_col, min_row), width, height,
+#                 fill=False, edgecolor=color, linewidth=1.5
+#             )
+#             ax.add_patch(rect)
+#             ax.text(min_col, min_row, f'C{class_idx}', fontsize=8,
+#                     color='white', bbox=dict(facecolor='black', alpha=0.5))
+#
+#     # Set axis labels
+#     if matrix_type == 'RA':
+#         ax.set_xlabel('Azimuth (deg)', fontsize=8)
+#         ax.set_ylabel('Range (m)', fontsize=8)
+#     else:
+#         ax.set_xlabel('Doppler (m/s)', fontsize=8)
+#         ax.set_ylabel('Range (m)', fontsize=8)
+#     ax.tick_params(axis='both', labelsize=8)
 
 
 def visualize_radar_nextsort(rd_data, ra_data, rd_mask, ra_mask,
-                            rd_outputs, ra_outputs, nb_classes,
-                            output_path=None, frame_num=0,
-                            camera_image=None):
+                            rd_pred_masks, ra_pred_masks, nb_classes,
+                            output_path=None, frame_num=None, frame_num_in_seq=None,
+                            camera_image_path=None):
     """
     Prepares inputs for plot_combined_results by processing:
     - Radar matrices
@@ -173,20 +107,16 @@ def visualize_radar_nextsort(rd_data, ra_data, rd_mask, ra_mask,
     - Camera image
     """
     # Select specific frame
-    rd_matrix_frame = rd_data[frame_num].mean(0)
-    ra_matrix_frame = ra_data[frame_num].mean(0)
+    rd_matrix_frame = rd_data.mean(0)
+    ra_matrix_frame = ra_data.mean(0)
 
     # Process ground truth masks
-    rd_mask_frame = rd_mask[frame_num][-nb_classes+1:]
-    ra_mask_frame = ra_mask[frame_num][-nb_classes+1:]
-
-    # Process predictions (convert logits to class masks)
-    rd_pred_masks = torch.argmax(rd_outputs, axis=1)[frame_num]
-    ra_pred_masks = torch.argmax(ra_outputs, axis=1)[frame_num]
+    rd_mask_frame = np.array(mask_to_img(rd_mask))
+    ra_mask_frame = np.array(mask_to_img(ra_mask))
 
     # Convert predictions to multi-channel masks
-    rd_outputs_frame = np.array(mask_to_img(rd_pred_masks)).transpose(2, 0, 1)
-    ra_outputs_frame = np.array(mask_to_img(ra_pred_masks)).transpose(2, 0, 1)
+    rd_outputs_frame = np.array(mask_to_img(rd_pred_masks))
+    ra_outputs_frame = np.array(mask_to_img(ra_pred_masks))
 
     # Ensure tensor format for consistency
     rd_mask_gt = torch.tensor(rd_mask_frame)
@@ -202,8 +132,10 @@ def visualize_radar_nextsort(rd_data, ra_data, rd_mask, ra_mask,
         'rd_mask_pred': rd_mask_pred,
         'ra_mask_pred': ra_mask_pred,
         'output_path': output_path,
+        'camera_image_path': camera_image_path,
         'frame_num': frame_num,
-        'camera_image': camera_image
+        'frame_num_in_seq': frame_num_in_seq,
+
     }
 
 
@@ -375,3 +307,239 @@ def visualize_bbox_conversion(bbox, radar_coords, matrix_type='RA', seg_mask=Non
 
     plt.tight_layout()
     plt.show()
+
+
+# --------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
+
+def plot_radar_with_bboxes(ax, matrix, mask=None, bboxes=None,
+                           matrix_type='RD', title='', color='red',
+                           mask_alpha=0.5, mask_cmap='jet'):
+    """
+    Plots a radar matrix (RD or RA) using radar_resolution for axis scaling,
+    optionally overlays a mask and provided bounding boxes.
+
+    Args:
+        ax (matplotlib.axes.Axes): The axes to plot on.
+        matrix (np.ndarray): The radar matrix data (e.g., RD or RA).
+        mask (np.ndarray, optional): Segmentation mask to overlay. Defaults to None.
+        bboxes (list, optional): List of bounding boxes [min_row, min_col, max_row, max_col]
+                                 in pixel coordinates. Defaults to None.
+        matrix_type (str): Type of matrix ('RD' or 'RA') to determine axis scaling.
+        title (str): Title for the subplot.
+        color (str): Color for bounding boxes.
+        mask_alpha (float): Transparency for the mask overlay.
+        mask_cmap (str): Colormap for the mask overlay.
+    """
+    if matrix is None:
+        ax.set_title(f"{title} (No Data)")
+        ax.text(0.5, 0.5, 'No Matrix Data', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return
+
+    height, width = matrix.shape # Actual dimensions of the input matrix
+
+    # --- Calculate axis ranges using radar_resolution ---
+    # Y-axis (Range)
+    # Use actual matrix height to determine max range shown, assuming bins start from offset
+    actual_range_max = radar_resolution['range_offset'] + height * radar_resolution['range_res']
+    y_range = (radar_resolution['range_offset'], actual_range_max)
+    y_label = 'Range (m)'
+
+    # X-axis (Angle or Doppler)
+    if matrix_type == 'RA':
+        # Check consistency (optional)
+        # if width != radar_resolution['azimuth_bins']:
+        #    print(f"Warning: Matrix width {width} != azimuth_bins {radar_resolution['azimuth_bins']}")
+        x_range = (-radar_resolution['fov'] / 2, radar_resolution['fov'] / 2)
+        x_label = 'Angle (degrees)'
+
+    elif matrix_type == 'RD':
+        # Check consistency (optional)
+        # if width != radar_resolution['doppler_bins']:
+        #    print(f"Warning: Matrix width {width} != doppler_bins {radar_resolution['doppler_bins']}")
+        # Use min/max doppler. Ensure order matches data representation (check sensor docs)
+        # Assuming 0th column is max_doppler, last column is min_doppler based on previous example (13.5, -13.5)
+        x_range = (radar_resolution['max_doppler'], radar_resolution['min_doppler'])
+        x_label = 'Doppler (m/s)'
+    else: # Default fallback (should not happen with 'RD'/'RA')
+        x_range = (0, width)
+        x_label = 'X-pixels'
+    # --- End Calculate axis ranges ---
+
+
+    # Plot the main matrix data using extent
+    im = ax.imshow(matrix, aspect='auto', cmap='viridis', # Choose appropriate cmap
+                   extent=(x_range[0], x_range[1], y_range[0], y_range[1]),
+                   origin='lower') # Set origin to lower so range starts at bottom
+
+    # Overlay mask if provided
+    if mask is not None:
+        if torch.is_tensor(mask):
+            mask = mask.cpu().numpy()
+        # If multi-channel (e.g., shape: (C, H, W) or (H, W, C) with C > 1), reduce to single channel
+        if mask.ndim == 3:
+            # Check if the channel is the first dimension (C, H, W)
+            if mask.shape[0] < mask.shape[-1]:
+                mask_vis = np.argmax(mask, axis=0)
+            else:  # Otherwise assume channels are in the last dimension
+                mask_vis = np.argmax(mask, axis=-1)
+        else:
+            mask_vis = mask
+        ax.imshow(mask_to_img(mask_vis), cmap=mask_cmap, alpha=mask_alpha, aspect='auto',
+                  extent=(x_range[0], x_range[1], y_range[0], y_range[1]),
+                  origin='lower') # Match origin
+
+    # Overlay bounding boxes if provided
+    if bboxes is not None:
+        # Calculate scaling factors based on physical ranges and pixel dimensions
+        x_scale = (x_range[1] - x_range[0]) / width
+        y_scale = (y_range[1] - y_range[0]) / height
+
+        for bbox in bboxes:
+            min_row, min_col, max_row, max_col = bbox
+
+            # Convert pixel coordinates to physical coordinates
+            # Origin (bottom-left corner of the rectangle)
+            # For x: start from left edge (x_range[0]) and add offset based on min_col
+            phys_min_x = x_range[0] + min_col * x_scale
+             # For y: start from bottom edge (y_range[0]) and add offset based on min_row
+            phys_min_y = y_range[0] + min_row * y_scale
+
+            phys_width = (max_col - min_col) * x_scale
+            phys_height = (max_row - min_row) * y_scale
+
+            rect = patches.Rectangle((phys_min_x, phys_min_y), phys_width, phys_height,
+                                     linewidth=2, edgecolor=color, facecolor='none')
+            ax.add_patch(rect)
+
+    ax.set_title(title)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+
+    # Ensure limits match the calculated ranges explicitly
+    ax.set_ylim(y_range[0], y_range[1])
+    ax.set_xlim(x_range[0], x_range[1])
+
+
+def plot_combined_results(rd_matrix=None, ra_matrix=None,
+                          rd_mask_gt=None, ra_mask_gt=None,
+                          rd_mask_pred=None, ra_mask_pred=None,
+                          rd_bboxes_gt=None, ra_bboxes_gt=None,
+                          rd_bboxes_pred=None, ra_bboxes_pred=None,
+                          output_path=None, frame_num=None, frame_num_in_seq=None,
+                          camera_image_path=None,
+                          figsize=(16, 12)):
+    """
+    Plots ground truth vs predictions using radar_resolution for scaling.
+    Accepts bounding boxes as input. Flexible to missing inputs.
+    """
+    # Create figure with grid layout
+    fig = plt.figure(figsize=figsize)
+
+    # Determine grid layout based on camera image presence
+    plot_camera = False
+    if camera_image_path:
+        try:
+            # Basic check if path looks like a file path before checking existence
+            if Path(camera_image_path).is_file():
+                plot_camera = True
+            else:
+                 print(f"Warning: Camera image path invalid or not found: {camera_image_path}")
+        except Exception as e:
+             print(f"Warning: Error checking camera path {camera_image_path}: {e}")
+
+
+    if plot_camera:
+        nrows, ncols = 3, 2
+        height_ratios = [2, 2, 1.5] # Ratios for RD, RA, Camera
+    else:
+        nrows, ncols = 2, 2
+        height_ratios = [1, 1] # Ratios for RD, RA
+
+
+    gs = fig.add_gridspec(nrows=nrows, ncols=ncols,
+                          height_ratios=height_ratios,
+                          width_ratios=[1, 1],
+                          hspace=0.5, wspace=0.3) # Adjusted spacing slightly
+
+    # Create subplot axes
+    ax_gt_rd = fig.add_subplot(gs[0, 0])   # Ground Truth RD
+    ax_pred_rd = fig.add_subplot(gs[0, 1]) # Predicted RD
+    ax_gt_ra = fig.add_subplot(gs[1, 0])   # Ground Truth RA
+    ax_pred_ra = fig.add_subplot(gs[1, 1]) # Predicted RA
+    if plot_camera:
+        ax_cam = fig.add_subplot(gs[2, :]) # Camera view spans bottom row
+
+    # --- Plotting Calls using the updated helper function ---
+
+    # Plot RD Ground Truth
+    plot_radar_with_bboxes(ax_gt_rd, rd_matrix, rd_mask_gt, rd_bboxes_gt,
+                           matrix_type='RD', title='Ground Truth RD', color='lime')
+
+    # Plot RD Prediction
+    plot_radar_with_bboxes(ax_pred_rd, rd_matrix, rd_mask_pred, rd_bboxes_pred,
+                           matrix_type='RD', title='Output RD', color='red')
+
+    # Plot RA Ground Truth
+    # Check if ra_matrix exists before trying to determine its height for range calculation
+    # Assuming ra_matrix height dictates range bins shown, pass the specific matrix
+    plot_radar_with_bboxes(ax_gt_ra, ra_matrix, ra_mask_gt, ra_bboxes_gt,
+                           matrix_type='RA', title='Ground Truth RA', color='lime')
+
+
+    # Plot RA Prediction
+    plot_radar_with_bboxes(ax_pred_ra, ra_matrix, ra_mask_pred, ra_bboxes_pred,
+                           matrix_type='RA', title='Output RA', color='red')
+
+    # Add camera image if requested and available
+    if plot_camera:
+        try:
+            camera_image = plt.imread(camera_image_path)
+            ax_cam.imshow(camera_image)
+            ax_cam.axis('off')
+            ax_cam.set_title('Camera View', fontsize=12)
+        except FileNotFoundError:
+             ax_cam.set_title("Camera Image Not Found")
+             ax_cam.text(0.5, 0.5, 'Image not found', horizontalalignment='center', verticalalignment='center', transform=ax_cam.transAxes, wrap=True)
+             ax_cam.set_xticks([]); ax_cam.set_yticks([])
+        except Exception as e:
+            ax_cam.set_title("Error Loading Camera Image")
+            ax_cam.text(0.5, 0.5, f'Error: {e}', horizontalalignment='center', verticalalignment='center', transform=ax_cam.transAxes, wrap=True)
+            ax_cam.set_xticks([]); ax_cam.set_yticks([])
+
+
+    # Add a main title (optional)
+    title_parts = []
+    if frame_num is not None:
+        title_parts.append(f'Frame {frame_num}')
+    if frame_num_in_seq is not None and frame_num_in_seq != frame_num :
+         title_parts.append(f'(Seq {frame_num_in_seq})')
+    if title_parts:
+        fig.suptitle(' '.join(title_parts) + ' Analysis', fontsize=16)
+
+
+    # Adjust layout tightly before saving or showing
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to prevent title overlap if suptitle is used
+
+    # Save or display results
+    if output_path:
+        os.makedirs(output_path, exist_ok=True)
+        fname_frame_part = frame_num if frame_num is not None else frame_num_in_seq
+        # Handle case where frame_num might be None but frame_num_in_seq isn't
+        if fname_frame_part is None: fname_frame_part = 'unknown'
+        save_path = os.path.join(output_path, f'frame_{fname_frame_part}_combined.png')
+        try:
+            plt.savefig(save_path, dpi=150) # Removed bbox_inches='tight' as fig.tight_layout() is used
+            print(f"Saved combined results to: {save_path}")
+        except Exception as e:
+            print(f"Error saving figure to {save_path}: {e}")
+        finally:
+             plt.close(fig)
+    else:
+        plt.show()
+        # plt.close(fig) # Close figure after showing interactively
