@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 import sys
 from pathlib import Path
 
-from data.carrada.images import paths_npy2jpg
+from data.carrada.import_utils import paths_npy2jpg
 from radar_nextstop.utils_nextstop import plot_rd_ra_with_bboxes, convert_pixel_to_radar_coords
 
 # Get the current file's directory and move up to the project's root
@@ -163,7 +163,9 @@ def test_model(cfg=cfg):
                     )
 
                     # Pass directly to plot_combined_results
-                    plot_combined_results(**vis_data)
+                    plot_combined_results(**vis_data,
+                                          rd_detections_pred=detections_rd,
+                                          ra_detections_pred=detections_ra,)
 
             print("Tracking complete.")
         print(f"Finished processing sequence {i + 1}/{len(seq_testloader)}")

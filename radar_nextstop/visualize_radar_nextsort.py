@@ -8,8 +8,9 @@ import torch
 from fontTools.unicodedata import block
 from matplotlib import patches
 
+from data.carrada.import_utils import paths_2annotBB, get_gt_detections_from_json
 from mvrss.utils.functions import mask_to_img
-from radar_nextstop.object_detector import create_bounding_boxes
+from radar_nextstop.object_detector import create_bounding_boxes, RadarDetection
 from radar_nextstop.utils_nextstop import radar_resolution
 
 
@@ -315,7 +316,8 @@ def visualize_bbox_conversion(bbox, radar_coords, matrix_type='RA', seg_mask=Non
 # --------------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------------
 
-def plot_radar_with_bboxes(ax, matrix, mask=None, bboxes=None,
+def plot_radar_with_bboxes(ax, matrix, mask=None,
+                           detections: list[RadarDetection] = None, # Changed from bboxes
                            matrix_type='RD', title='', color='red',
                            mask_alpha=0.5, mask_cmap='jet'):
     """
@@ -326,8 +328,7 @@ def plot_radar_with_bboxes(ax, matrix, mask=None, bboxes=None,
         ax (matplotlib.axes.Axes): The axes to plot on.
         matrix (np.ndarray): The radar matrix data (e.g., RD or RA).
         mask (np.ndarray, optional): Segmentation mask to overlay. Defaults to None.
-        bboxes (list, optional): List of bounding boxes [min_row, min_col, max_row, max_col]
-                                 in pixel coordinates. Defaults to None.
+        detections (list[RadarDetection], optional): List of RadarDetection objects for bounding boxes. Defaults to None.
         matrix_type (str): Type of matrix ('RD' or 'RA') to determine axis scaling.
         title (str): Title for the subplot.
         color (str): Color for bounding boxes.
@@ -394,28 +395,41 @@ def plot_radar_with_bboxes(ax, matrix, mask=None, bboxes=None,
                   extent=(x_range[0], x_range[1], y_range[0], y_range[1]),
                   origin='lower') # Match origin
 
-    # Overlay bounding boxes if provided
-    if bboxes is not None:
-        # Calculate scaling factors based on physical ranges and pixel dimensions
+    # Replace the loop over bboxes with a loop over detections
+    if detections is not None: # Check if detections list exists
         x_scale = (x_range[1] - x_range[0]) / width
         y_scale = (y_range[1] - y_range[0]) / height
 
-        for bbox in bboxes:
-            min_row, min_col, max_row, max_col = bbox
+        for detection in detections: # Loop over RadarDetection objects
+            # Extract info from detection object
+            cx_plot = detection.cx
+            cy = detection.cy
+            # Assuming detection.length is width in pixels (cols)
+            # and detection.width is height in pixels (rows)
+            # based on how detect_objects calculates them
+            det_length_px = detection.length
+            det_width_px = detection.width
 
-            # Convert pixel coordinates to physical coordinates
-            # Origin (bottom-left corner of the rectangle)
-            # For x: start from left edge (x_range[0]) and add offset based on min_col
+            # Calculate pixel coordinates (min/max row/col) from center and size
+            min_col = cx_plot - det_length_px / 2
+            max_col = cx_plot + det_length_px / 2
+            min_row = cy - det_width_px / 2 # cy is already correct (y-axis / rows)
+            max_row = cy + det_width_px / 2
+
+            # Convert pixel coordinates to physical coordinates for the rectangle
             phys_min_x = x_range[0] + min_col * x_scale
-             # For y: start from bottom edge (y_range[0]) and add offset based on min_row
             phys_min_y = y_range[0] + min_row * y_scale
-
-            phys_width = (max_col - min_col) * x_scale
-            phys_height = (max_row - min_row) * y_scale
+            phys_width = det_length_px * x_scale # Use pixel dimensions directly for scaling
+            phys_height = det_width_px * y_scale # Use pixel dimensions directly for scaling
 
             rect = patches.Rectangle((phys_min_x, phys_min_y), phys_width, phys_height,
                                      linewidth=2, edgecolor=color, facecolor='none')
             ax.add_patch(rect)
+
+            # Optional: Add score or class_id as text
+            ax.text(phys_min_x, phys_min_y - 2, # Adjust position as needed
+                    f"C:{detection.class_id} S:{detection.score:.2f}",
+                    color=color, fontsize=8)
 
     ax.set_title(title)
     ax.set_xlabel(x_label)
@@ -429,8 +443,8 @@ def plot_radar_with_bboxes(ax, matrix, mask=None, bboxes=None,
 def plot_combined_results(rd_matrix=None, ra_matrix=None,
                           rd_mask_gt=None, ra_mask_gt=None,
                           rd_mask_pred=None, ra_mask_pred=None,
-                          rd_bboxes_gt=None, ra_bboxes_gt=None,
-                          rd_bboxes_pred=None, ra_bboxes_pred=None,
+                          rd_detections_pred: list[RadarDetection] = None, ra_detections_pred: list[RadarDetection] = None,
+                          rd_gt_json_path: str = None, ra_gt_json_path: str = None,
                           output_path=None, frame_num=None, frame_num_in_seq=None,
                           camera_image_path=None,
                           figsize=(16, 12)):
@@ -474,26 +488,38 @@ def plot_combined_results(rd_matrix=None, ra_matrix=None,
     ax_pred_ra = fig.add_subplot(gs[1, 1]) # Predicted RA
     if plot_camera:
         ax_cam = fig.add_subplot(gs[2, :]) # Camera view spans bottom row
+        if not (rd_gt_json_path or ra_gt_json_path) :
+            rd_gt_json_path = paths_2annotBB(path_to_npy=camera_image_path, matrix_type='RD')['annot_path']
+            ra_gt_json_path = paths_2annotBB(path_to_npy=camera_image_path, matrix_type='RA')['annot_path']
+
+    # --- Get Ground Truth Detections from JSON ---
+    fetched_rd_gt_dets = []
+    fetched_ra_gt_dets = []
+    if rd_gt_json_path and frame_num:
+        fetched_rd_gt_dets = get_gt_detections_from_json(rd_gt_json_path, frame_num)
+
+    if ra_gt_json_path and frame_num:
+        fetched_ra_gt_dets = get_gt_detections_from_json(ra_gt_json_path, frame_num, v_flip=True)
 
     # --- Plotting Calls using the updated helper function ---
 
     # Plot RD Ground Truth
-    plot_radar_with_bboxes(ax_gt_rd, rd_matrix, rd_mask_gt, rd_bboxes_gt,
+    plot_radar_with_bboxes(ax_gt_rd, rd_matrix, rd_mask_gt, fetched_rd_gt_dets,
                            matrix_type='RD', title='Ground Truth RD', color='lime')
 
     # Plot RD Prediction
-    plot_radar_with_bboxes(ax_pred_rd, rd_matrix, rd_mask_pred, rd_bboxes_pred,
+    plot_radar_with_bboxes(ax_pred_rd, rd_matrix, rd_mask_pred, rd_detections_pred,
                            matrix_type='RD', title='Output RD', color='red')
 
     # Plot RA Ground Truth
     # Check if ra_matrix exists before trying to determine its height for range calculation
     # Assuming ra_matrix height dictates range bins shown, pass the specific matrix
-    plot_radar_with_bboxes(ax_gt_ra, ra_matrix, ra_mask_gt, ra_bboxes_gt,
+    plot_radar_with_bboxes(ax_gt_ra, ra_matrix, ra_mask_gt, fetched_ra_gt_dets,
                            matrix_type='RA', title='Ground Truth RA', color='lime')
 
 
     # Plot RA Prediction
-    plot_radar_with_bboxes(ax_pred_ra, ra_matrix, ra_mask_pred, ra_bboxes_pred,
+    plot_radar_with_bboxes(ax_pred_ra, ra_matrix, ra_mask_pred, ra_detections_pred,
                            matrix_type='RA', title='Output RA', color='red')
 
     # Add camera image if requested and available
