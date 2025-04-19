@@ -132,19 +132,6 @@ class Tester:
                     rd_outputs = rd_outputs.cpu().clone().detach()
                     ra_outputs = ra_outputs.cpu().clone().detach()
 
-                    # Prepare inputs
-                    vis_data = visualize_radar_nextsort(
-                        rd_data, ra_data,
-                        rd_mask, ra_mask,
-                        rd_outputs, ra_outputs,
-                        nb_classes=self.nb_classes,
-                        output_path='./results',
-                        frame_num=-1,
-                        camera_image=None
-                    )
-
-                    # Pass directly to plot_combined_results
-                    plot_combined_results(**vis_data)
 
 
 

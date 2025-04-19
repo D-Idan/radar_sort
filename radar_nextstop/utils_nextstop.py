@@ -50,9 +50,7 @@ def convert_pixel_to_radar_coords(pixel_coords, matrix_type='RA', range_flip=Fal
     col, range = pixel_coords
 
     # Use 0.0 as default range_offset if not specified
-    range_val = (range * radar_resolution['range_res']) + radar_resolution["range_offset"]
-    if range_flip:
-        range_val = radar_resolution['range_max'] - range_val
+    range_val = (range * radar_resolution['range_res'])# + radar_resolution["range_offset"]
 
     if matrix_type == 'RA':
         # Get FOV (default to 180 if not specified) to center azimuth

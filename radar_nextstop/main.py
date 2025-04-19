@@ -32,7 +32,9 @@ from mvrss.models import TMVANet, MVNet
 import platform
 
 
-cfg_mac = "/Users/daniel/Idan/University/Masters/Thesis/2024/datasets/logs/carrada/mvnet/mvnet_e300_lr0.0001_s42_0/config.json"
+# cfg_mac = "/Users/daniel/Idan/University/Masters/Thesis/2024/datasets/logs/carrada/mvnet/mvnet_e300_lr0.0001_s42_0/config.json"
+cfg_mac = "/Users/daniel/Idan/University/Masters/Thesis/2024/datasets/logs/carrada/tmvanet/tmvanet_e300_lr0.0001_s42_5/config.json"
+
 cfg_ubuntu = "/mnt/data/myprojects/PycharmProjects/thesis_repos/MVRSS/logs/carrada/mvnet/mvnet_e300_lr0.0001_s42_0/config.json"
 if platform.system() == 'Darwin':  # macOS
     cfg = cfg_mac
@@ -56,6 +58,7 @@ def test_model(cfg=cfg):
     cfg_path = args.cfg
     with open(cfg_path, 'r') as fp:
         cfg = json.load(fp)
+        print(cfg)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cfg['device'] = device
@@ -114,7 +117,7 @@ def test_model(cfg=cfg):
                 rd_frame_input = run_result['rd_data'][t]
                 ra_frame_input = run_result['ra_data'][t]
 
-                if cfg['transformations'] == 'flip':
+                if 'flip' in cfg['transformations']:
                     ra_frame_input = torch.flip(ra_frame_input, [1])
                     gt_ra = torch.flip(gt_ra, [0])
                     seg_mask_ra = torch.flip(seg_mask_ra, [0])
@@ -128,24 +131,25 @@ def test_model(cfg=cfg):
 
 
 
-                # Update tracker with detections; get active tracks
-                if detections_ra:
+                # # Update tracker with detections; get active tracks
+                # if detections_ra:
+                #     detections_rd = detect_objects(seg_mask_rd, min_area=50)
+                #     cx = detections_rd[-1].cx
+                #     cy = detections_rd[-1].cy
+                #     print(convert_pixel_to_radar_coords([cx, cy], 'RD'))
+                #
+                #
+                #     # Convert detections to the format expected by the tracker
+                #     active_tracks = tracker.update(detections_ra)
+                #
+                #     # Print active track IDs
+                #     active_ids = [track.track_id for track in active_tracks]
+                #     print(f"Frame {t}: {len(detections_ra)} detections, Active track IDs: {active_ids}")
+                #
+                #     # Optional: If radar point data is available, assign points to tracks here
+
+                if ind_batch > 6 and ind_batch < 16:
                     detections_rd = detect_objects(seg_mask_rd, min_area=50)
-                    cx = detections_rd[0].cx
-                    cy = detections_rd[0].cy
-                    print(convert_pixel_to_radar_coords([cx, cy], 'RD', range_flip=True))
-                    # # Visualize the mask with bounding boxes (only show objects above a minimal area)
-                    # visualize_mask_and_bboxes(seg_mask_rd, min_area=10)
-
-                    # Convert detections to the format expected by the tracker
-                    active_tracks = tracker.update(detections_ra)
-
-                    # Print active track IDs
-                    active_ids = [track.track_id for track in active_tracks]
-                    print(f"Frame {t}: {len(detections_ra)} detections, Active track IDs: {active_ids}")
-
-                    # Optional: If radar point data is available, assign points to tracks here
-
                     # Prepare inputs
                     vis_data = visualize_radar_nextsort(
                         rd_data=rd_frame_input,
@@ -155,7 +159,7 @@ def test_model(cfg=cfg):
                         rd_pred_masks=seg_mask_rd,
                         ra_pred_masks=seg_mask_ra,
                         nb_classes=cfg['nb_classes'],
-                        output_path=None,
+                        output_path='./results' , # None,
                         camera_image_path=path_rel_img['img_path'],
                         frame_num=path_rel_img['img_num'],
                         frame_num_in_seq=path_rel_img['img_seq'],
@@ -165,7 +169,8 @@ def test_model(cfg=cfg):
                     # Pass directly to plot_combined_results
                     plot_combined_results(**vis_data,
                                           rd_detections_pred=detections_rd,
-                                          ra_detections_pred=detections_ra,)
+                                          ra_detections_pred=detections_ra,
+                                          )
 
             print("Tracking complete.")
         print(f"Finished processing sequence {i + 1}/{len(seq_testloader)}")
