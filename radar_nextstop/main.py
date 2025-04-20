@@ -35,7 +35,8 @@ import platform
 # cfg_mac = "/Users/daniel/Idan/University/Masters/Thesis/2024/datasets/logs/carrada/mvnet/mvnet_e300_lr0.0001_s42_0/config.json"
 cfg_mac = "/Users/daniel/Idan/University/Masters/Thesis/2024/datasets/logs/carrada/tmvanet/tmvanet_e300_lr0.0001_s42_5/config.json"
 
-cfg_ubuntu = "/mnt/data/myprojects/PycharmProjects/thesis_repos/MVRSS/logs/carrada/mvnet/mvnet_e300_lr0.0001_s42_0/config.json"
+# cfg_ubuntu = "/mnt/data/myprojects/PycharmProjects/thesis_repos/MVRSS/logs/carrada/mvnet/mvnet_e300_lr0.0001_s42_0/config.json"
+cfg_ubuntu = "/mnt/data/myprojects/PycharmProjects/thesis_repos/MVRSS/logs/carrada/tmvanet/tmvanet_e300_lr0.0001_s42_5/config.json"
 if platform.system() == 'Darwin':  # macOS
     cfg = cfg_mac
 elif platform.system() == 'Linux':  # Ubuntu
@@ -44,6 +45,7 @@ else:
     raise EnvironmentError("Unsupported operating system")
 
 target_seq = '2019-09-16-12-55-51'  # None
+target_seq = '2020-02-28-13-06-53'  # None
 
 def test_model(cfg=cfg):
 
@@ -106,23 +108,22 @@ def test_model(cfg=cfg):
             for t in range(len(run_result['rd_outputs'])):
                 path_rel_img = paths_npy2jpg(batch_frames['paths_ra'][t])
 
-                seg_pred_rd = normalize(run_result['rd_outputs'][t], signal_type='range_doppler', norm_type='local')
-                seg_pred_ra = normalize(run_result['ra_outputs'][t], signal_type='range_angle', norm_type='local')
+                seg_pred_rd = normalize(run_result['rd_outputs'][t], signal_type='range_doppler', norm_type='local').cpu()
+                seg_pred_ra = normalize(run_result['ra_outputs'][t], signal_type='range_angle', norm_type='local').cpu()
                 seg_mask_rd = torch.argmax(seg_pred_rd, dim=0)
                 seg_mask_ra = torch.argmax(seg_pred_ra, dim=0)
 
-                gt_ra = torch.argmax(run_result['ra_mask'][t], dim=0)
-                gt_rd = torch.argmax(run_result['rd_mask'][t], dim=0)
+                gt_ra = torch.argmax(run_result['ra_mask'][t], dim=0).cpu()
+                gt_rd = torch.argmax(run_result['rd_mask'][t], dim=0).cpu()
 
-                rd_frame_input = run_result['rd_data'][t]
-                ra_frame_input = run_result['ra_data'][t]
+                rd_frame_input = run_result['rd_data'][t].cpu()
+                ra_frame_input = run_result['ra_data'][t].cpu()
 
                 if 'flip' in cfg['transformations']:
                     ra_frame_input = torch.flip(ra_frame_input, [1])
                     gt_ra = torch.flip(gt_ra, [0])
                     seg_mask_ra = torch.flip(seg_mask_ra, [0])
                     seg_pred_ra = torch.flip(seg_pred_ra, [1])
-
 
 
 
@@ -148,7 +149,7 @@ def test_model(cfg=cfg):
                 #
                 #     # Optional: If radar point data is available, assign points to tracks here
 
-                if ind_batch > 6 and ind_batch < 16:
+                if ind_batch > 14 and ind_batch < 22:
                     detections_rd = detect_objects(seg_mask_rd, min_area=50)
                     # Prepare inputs
                     vis_data = visualize_radar_nextsort(
