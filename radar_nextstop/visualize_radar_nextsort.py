@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from fontTools.unicodedata import block
 from matplotlib import patches
+from scipy.interpolate import griddata
 
 from data.carrada.import_utils import paths_2annotBB, get_gt_detections_from_json
 from mvrss.utils.functions import mask_to_img
@@ -41,59 +42,6 @@ def plot_matrix(ax, matrix, mask, min_area, title):
             ax.add_patch(rect)
             ax.text(min_col, min_row, f'Class {class_idx}', fontsize=8,
                     color='white', bbox=dict(facecolor='black', alpha=0.5))
-
-
-# def plot_radar_comparison(ax, matrix, mask, matrix_type,
-#                          title, min_area, color):
-#     """Helper function to plot individual radar matrix comparison"""
-#     # Flip RD matrices for correct orientation
-#     if matrix_type == 'RD':
-#         matrix = torch.flip(matrix, dims=[0])
-#         mask = torch.flip(mask, dims=[-2, -1])
-#         # Get current axis limits
-#         x_center = matrix.shape[1] // 2
-#         ax.set_xticks([0, x_center, matrix.shape[1] - 1])
-#         ax.set_xticklabels([f'-{radar_resolution["max_doppler"]}', '0', f'+{radar_resolution["max_doppler"]}'])
-#
-#     # Convert mask to numpy if needed
-#     if torch.is_tensor(mask):
-#         mask = mask.cpu().numpy()
-#     if torch.is_tensor(matrix):
-#         matrix = matrix.cpu().numpy()
-#
-#     # Generate bounding boxes
-#     bboxes = create_bounding_boxes(mask, min_area=min_area)
-#
-#     # Plot base matrix
-#     ax.imshow(matrix.squeeze(), cmap='viridis')
-#     ax.set_title(title, fontsize=10)
-#
-#     # Add mask overlay
-#     mask_overlay = mask.squeeze().transpose(1, 2, 0)
-#     ax.imshow(mask_overlay, alpha=0.5, cmap='jet')
-#
-#     # Add bounding boxes
-#     for class_idx, boxes in bboxes.items():
-#         for bbox in boxes:
-#             min_row, min_col, max_row, max_col = bbox
-#             width = max_col - min_col
-#             height = max_row - min_row
-#             rect = mpatches.Rectangle(
-#                 (min_col, min_row), width, height,
-#                 fill=False, edgecolor=color, linewidth=1.5
-#             )
-#             ax.add_patch(rect)
-#             ax.text(min_col, min_row, f'C{class_idx}', fontsize=8,
-#                     color='white', bbox=dict(facecolor='black', alpha=0.5))
-#
-#     # Set axis labels
-#     if matrix_type == 'RA':
-#         ax.set_xlabel('Azimuth (deg)', fontsize=8)
-#         ax.set_ylabel('Range (m)', fontsize=8)
-#     else:
-#         ax.set_xlabel('Doppler (m/s)', fontsize=8)
-#         ax.set_ylabel('Range (m)', fontsize=8)
-#     ax.tick_params(axis='both', labelsize=8)
 
 
 def visualize_radar_nextsort(rd_data, ra_data, rd_mask, ra_mask,
@@ -446,7 +394,7 @@ def plot_combined_results(rd_matrix=None, ra_matrix=None,
                           rd_detections_pred: list[RadarDetection] = None, ra_detections_pred: list[RadarDetection] = None,
                           rd_gt_json_path: str = None, ra_gt_json_path: str = None,
                           output_path=None, frame_num=None, frame_num_in_seq=None,
-                          camera_image_path=None,
+                          camera_image_path=None, plot_ra_cartesian=False,
                           figsize=(16, 12)):
     """
     Plots ground truth vs predictions using radar_resolution for scaling.
@@ -511,16 +459,31 @@ def plot_combined_results(rd_matrix=None, ra_matrix=None,
     plot_radar_with_bboxes(ax_pred_rd, rd_matrix, rd_mask_pred, rd_detections_pred,
                            matrix_type='RD', title='Output RD', color='red')
 
-    # Plot RA Ground Truth
-    # Check if ra_matrix exists before trying to determine its height for range calculation
-    # Assuming ra_matrix height dictates range bins shown, pass the specific matrix
-    plot_radar_with_bboxes(ax_gt_ra, ra_matrix, ra_mask_gt, fetched_ra_gt_dets,
-                           matrix_type='RA', title='Ground Truth RA', color='lime')
+    if plot_ra_cartesian:
+        Xc, Yc, cart_gt, cart_labels_gt, cart_gt_dets = polar_to_cartesian(
+            ra_matrix, ra_mask_gt, fetched_ra_gt_dets
+        )
+        _, _, cart_pr, cart_labels_pr, cart_pr_dets = polar_to_cartesian(
+            ra_matrix, ra_mask_pred, ra_detections_pred
+        )
+        plot_cartesian(ax_gt_ra, Xc, Yc, cart_gt,
+                       labels=cart_labels_gt, detections=cart_gt_dets,
+                       title='GT RA (Cartesian)')
+        plot_cartesian(ax_pred_ra, Xc, Yc, cart_pr,
+                       labels=cart_labels_pr, detections=cart_pr_dets,
+                       title='Output RA (Cartesian)')
+    else:
+
+        # Plot RA Ground Truth
+        # Check if ra_matrix exists before trying to determine its height for range calculation
+        # Assuming ra_matrix height dictates range bins shown, pass the specific matrix
+        plot_radar_with_bboxes(ax_gt_ra, ra_matrix, ra_mask_gt, fetched_ra_gt_dets,
+                               matrix_type='RA', title='Ground Truth RA', color='lime')
 
 
-    # Plot RA Prediction
-    plot_radar_with_bboxes(ax_pred_ra, ra_matrix, ra_mask_pred, ra_detections_pred,
-                           matrix_type='RA', title='Output RA', color='red')
+        # Plot RA Prediction
+        plot_radar_with_bboxes(ax_pred_ra, ra_matrix, ra_mask_pred, ra_detections_pred,
+                               matrix_type='RA', title='Output RA', color='red')
 
     # Add camera image if requested and available
     if plot_camera:
@@ -569,3 +532,142 @@ def plot_combined_results(rd_matrix=None, ra_matrix=None,
     else:
         plt.show()
         # plt.close(fig) # Close figure after showing interactively
+
+
+
+
+def make_cartesian_grid(range_max, resolution=0.05):
+    """Uniform grid x∈[−R,R], y∈[0,R] at `resolution` meters."""
+    x = np.arange(-range_max, range_max + resolution, resolution)
+    y = np.arange(0,        range_max + resolution, resolution)
+    return np.meshgrid(x, y)
+
+# ----------------------------------------
+# 1. Convert multi‑channel mask → label mask
+# ----------------------------------------
+def collapse_to_labels(ra_mask):
+    """
+    Accepts ra_mask of shape (H,W, C) or (C,H,W) or torch.Tensor.
+    Returns a numpy array of shape (H,W) with integer labels [0..C-1].
+    """
+    # to numpy
+    if isinstance(ra_mask, torch.Tensor):
+        ra_mask = ra_mask.detach().cpu().numpy()
+    # ensure channel last
+    if ra_mask.ndim == 3 and ra_mask.shape[0] <= 4 and ra_mask.shape[0] != ra_mask.shape[2]:
+        # assume (C,H,W)
+        ra_mask = np.transpose(ra_mask, (1, 2, 0))
+    # now ra_mask is (H,W,C)
+    labels = np.argmax(ra_mask, axis=-1)
+    return labels
+
+
+# ----------------------------------------
+# 2. Polar → Cartesian (with labels)
+# ----------------------------------------
+def polar_to_cartesian(
+        ra_matrix: np.ndarray,
+        ra_mask: np.ndarray | torch.Tensor = None,
+        detections: list[RadarDetection] = None,
+        resolution: float = 0.05
+):
+    # --- Step A: get your polar pts and data values
+    n_r, n_th = ra_matrix.shape
+    r = radar_resolution['range_offset'] + np.arange(n_r) * radar_resolution['range_res']
+    theta = (np.linspace(-radar_resolution['fov'] / 2,
+                         radar_resolution['fov'] / 2,
+                         n_th) * np.pi / 180)
+    R_pol, T_pol = np.meshgrid(r, theta, indexing='ij')
+    Xp = R_pol * np.sin(T_pol)
+    Yp = R_pol * np.cos(T_pol)
+    pts_pol = np.vstack([Xp.ravel(), Yp.ravel()]).T
+    vals = ra_matrix.ravel()
+
+    # --- Step B: build cartesian grid
+    Xc, Yc = make_cartesian_grid(radar_resolution['range_max'], resolution)
+    pts_cart = np.vstack([Xc.ravel(), Yc.ravel()]).T
+
+    # --- Step C: interpolate the RA matrix
+    cart_vals = griddata(pts_pol, vals, pts_cart, method='nearest')
+    cart_matrix = cart_vals.reshape(Xc.shape)
+
+    # --- Step D: handle mask → label → interpolate labels
+    cart_labels = None
+    if ra_mask is not None:
+        # collapse to single channel labels H×W
+        lab = collapse_to_labels(ra_mask)  # (256,256)
+        lab_vals = lab.ravel().astype(float)  # length=65536
+        lab_cart = griddata(pts_pol, lab_vals, pts_cart,  # nearest keeps ints
+                            method='nearest')
+        cart_labels = lab_cart.reshape(Xc.shape).astype(int)
+
+    # --- Step E: convert detections → Cartesian
+    cart_detections = []
+    if detections:
+        for det in detections:
+            # center in meters
+            r_c = radar_resolution['range_offset'] + det.cy * radar_resolution['range_res']
+            th_c = (-radar_resolution['fov'] / 2 + det.cx * (radar_resolution['fov'] / n_th)) * np.pi / 180
+            x_c = r_c * np.sin(th_c)
+            y_c = r_c * np.cos(th_c)
+            # size in meters
+            theta_span = det.length * (radar_resolution['fov'] / n_th) * np.pi / 180
+            w_m = theta_span * r_c
+            h_m = det.width * radar_resolution['range_res']
+            cart_detections.append(
+                RadarDetection(cx=x_c, cy=y_c,
+                               length=w_m, width=h_m,
+                               class_id=det.class_id,
+                               score=det.score)
+            )
+    return Xc, Yc, cart_matrix, cart_labels, cart_detections
+
+
+# ----------------------------------------
+# 3. Plotting with discrete class colours
+# ----------------------------------------
+def plot_cartesian(
+        ax, Xc, Yc, matrix,
+        labels=None, detections=None,
+        cmap='viridis', alpha=0.6,
+        title=''
+):
+    """
+    - matrix: 2D float array
+    - labels: 2D int array same shape, or None
+    """
+    # background matrix
+    im = ax.pcolormesh(Xc, Yc, matrix, shading='auto', cmap=cmap)
+
+    # overlay each class mask
+    if labels is not None:
+        # pick a qualitative colormap
+        n_classes = labels.max() + 1
+        base_cmap = plt.get_cmap('tab10', n_classes)
+        # loop 1..(n_classes-1) to skip background=0
+        for cls in range(1, n_classes):
+            mask = (labels == cls)
+            if not mask.any(): continue
+            ax.contourf(Xc, Yc, mask, levels=[0.5, 1],
+                        colors=[base_cmap(cls)], alpha=alpha)
+
+    # draw detections, colored by class
+    if detections:
+        # map each class to same cmap
+        n_classes = max(d.class_id for d in detections) + 1
+        det_cmap = plt.get_cmap('tab10', n_classes)
+        for det in detections:
+            rect = mpatches.Rectangle(
+                (det.cx - det.length / 2, det.cy - det.width / 2),
+                det.length, det.width,
+                fill=False, edgecolor=det_cmap(det.class_id), linewidth=2
+            )
+            ax.add_patch(rect)
+            ax.text(det.cx, det.cy, f"C{det.class_id}",
+                    fontsize=8, color='white',
+                    bbox=dict(facecolor='black', alpha=0.5))
+
+    ax.set_aspect('equal', 'box')
+    ax.set_xlabel('X (m)')
+    ax.set_ylabel('Y (m)')
+    ax.set_title(title)
