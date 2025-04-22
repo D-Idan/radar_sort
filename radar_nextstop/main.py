@@ -18,7 +18,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from radar_nextstop.visualize_radar_nextsort import plot_image_2D, plot_image_RGB, visualize_mask_and_bboxes, \
+from radar_nextstop.visualize_radar_nextsort import plot_image_2D, plot_image_RGB, \
     visualize_radar_nextsort, plot_combined_results
 from radar_nextstop.object_detector import detect_objects
 from radar_nextstop.track_manager import TrackManager
