@@ -44,8 +44,25 @@ elif platform.system() == 'Linux':  # Ubuntu
 else:
     raise EnvironmentError("Unsupported operating system")
 
-target_seq = '2019-09-16-12-55-51'  # None
-# target_seq = '2020-02-28-13-06-53'  # None
+split_data = 'Train'  # Test / Train
+
+# Train dict_keys(['2019-09-16-12-52-12', '2019-09-16-12-55-51', '2019-09-16-12-58-42', '2019-09-16-13-03-38',
+#                   '2019-09-16-13-11-12', '2019-09-16-13-14-29', '2019-09-16-13-20-20', '2019-09-16-13-25-35',
+#                   '2020-02-28-12-12-16', '2020-02-28-12-16-05', '2020-02-28-12-22-05', '2020-02-28-13-05-44',
+#                   '2020-02-28-13-06-53', '2020-02-28-13-09-58', '2020-02-28-13-10-51', '2020-02-28-13-12-42',
+#                   '2020-02-28-13-13-43', '2020-02-28-13-15-36'])
+
+target_seq_train = '2019-09-16-12-55-51'  # None
+# target_seq_train = '2020-02-28-13-06-53'  # None
+
+
+# Test dict_keys(['2019-09-16-13-13-01', '2019-09-16-13-18-33', '2020-02-28-12-13-54', '2020-02-28-12-23-30',
+#                 '2020-02-28-13-08-51', '2020-02-28-13-14-35'])
+
+target_seq_test = '2019-09-16-13-13-01'  # None
+
+target_seq = target_seq_train if split_data == 'Train' else target_seq_test
+
 
 def test_model(cfg=cfg):
 
@@ -81,7 +98,8 @@ def test_model(cfg=cfg):
     model = model.to(device)
 
     tester = Tester(cfg)
-    seq_testloader = load_carrada_data(cfg, split='Train', target_seq=target_seq, batch_size=1, num_workers=0, shuffle=False)
+    seq_testloader = load_carrada_data(cfg, split=split_data, # Test / Train
+                                       target_seq=target_seq, batch_size=1, num_workers=0, shuffle=False)
     tester.set_annot_type(cfg['annot_type'])
 
     for i, sequence_data in enumerate(seq_testloader):
@@ -149,7 +167,7 @@ def test_model(cfg=cfg):
                 #
                 #     # Optional: If radar point data is available, assign points to tracks here
 
-                if ind_batch > 4 and ind_batch < 12:
+                if ind_batch > 8 and ind_batch < 16:
                     detections_rd = detect_objects(seg_mask_rd, min_area=50)
                     # Prepare inputs
                     vis_data = visualize_radar_nextsort(
