@@ -157,7 +157,7 @@ def plot_radar_with_bboxes(ax, matrix, mask=None,
 
 
     # Plot the main matrix data using extent
-    im = ax.imshow(matrix, aspect='auto', cmap='viridis', # Choose appropriate cmap
+    im = ax.imshow(matrix, aspect='auto', cmap='cividis', # Choose appropriate cmap
                    extent=(x_range[0], x_range[1], y_range[0], y_range[1]),
                    origin='lower') # Set origin to lower so range starts at bottom
 
@@ -464,7 +464,7 @@ def polar_to_cartesian(
 def plot_cartesian(
         ax, Xc, Yc, matrix,
         labels=None, detections=None,
-        cmap='viridis', alpha=0.6,
+        cmap='cividis', alpha=0.6,
         title=''
 ):
     """
