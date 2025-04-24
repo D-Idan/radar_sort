@@ -169,10 +169,20 @@ def plot_radar_with_bboxes(ax, matrix, mask=None,
         if mask.ndim == 3:
             # Check if the channel is the first dimension (C, H, W)
             if mask.shape[0] < mask.shape[-1]:
-                mask_vis = np.argmax(mask, axis=0)
+                argmax_mask = np.argmax(mask, axis=0)
             else:  # Otherwise assume channels are in the last dimension
-                mask_vis = np.argmax(mask, axis=-1)
+                argmax_mask = np.argmax(mask, axis=-1)
+
+            # Create mask_vis initialized to all zeros
+            mask_vis = np.zeros_like(argmax_mask)
+
+            # Identify pixels where at least one channel has a value greater than 0
+            non_zero_mask = np.any(mask > 0, axis=0 if mask.shape[0] < mask.shape[-1] else -1)
+
+            # Add 1 to the argmax result for the non-zero pixels
+            mask_vis[non_zero_mask] = argmax_mask[non_zero_mask] + 1
         else:
+            # If it's already a single-channel mask, just use it as is (assuming 0 represents background)
             mask_vis = mask
 
         # --- Create alpha mask ---
