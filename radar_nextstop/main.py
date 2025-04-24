@@ -60,8 +60,9 @@ target_seq_train = '2019-09-16-12-55-51'  # None
 #                 '2020-02-28-13-08-51', '2020-02-28-13-14-35'])
 
 target_seq_test = '2020-02-28-12-13-54'  # None
-target_seq_test = '2019-09-16-13-18-33'  # None
-target_seq_test = '2020-02-28-13-14-35'  # None
+# target_seq_test = '2019-09-16-13-18-33'  # None
+# target_seq_test = '2020-02-28-13-14-35'  # None
+# target_seq_test = '2020-02-28-13-08-51'  # None
 
 
 target_seq = target_seq_train if split_data == 'Train' else target_seq_test
@@ -170,7 +171,7 @@ def test_model(cfg=cfg):
                 #
                 #     # Optional: If radar point data is available, assign points to tracks here
 
-                if ind_batch > 8 and ind_batch < 16:
+                if ind_batch > 14 and ind_batch < 22:
                     detections_rd = detect_objects(seg_mask_rd, min_area=50)
                     # Prepare inputs
                     vis_data = visualize_radar_nextsort(
