@@ -44,7 +44,7 @@ elif platform.system() == 'Linux':  # Ubuntu
 else:
     raise EnvironmentError("Unsupported operating system")
 
-split_data = 'Train'  # Test / Train
+split_data = 'Test'  # Test / Train
 
 # Train dict_keys(['2019-09-16-12-52-12', '2019-09-16-12-55-51', '2019-09-16-12-58-42', '2019-09-16-13-03-38',
 #                   '2019-09-16-13-11-12', '2019-09-16-13-14-29', '2019-09-16-13-20-20', '2019-09-16-13-25-35',
@@ -59,7 +59,10 @@ target_seq_train = '2019-09-16-12-55-51'  # None
 # Test dict_keys(['2019-09-16-13-13-01', '2019-09-16-13-18-33', '2020-02-28-12-13-54', '2020-02-28-12-23-30',
 #                 '2020-02-28-13-08-51', '2020-02-28-13-14-35'])
 
-target_seq_test = '2019-09-16-13-13-01'  # None
+target_seq_test = '2020-02-28-12-13-54'  # None
+target_seq_test = '2019-09-16-13-18-33'  # None
+target_seq_test = '2020-02-28-13-14-35'  # None
+
 
 target_seq = target_seq_train if split_data == 'Train' else target_seq_test
 
@@ -189,7 +192,7 @@ def test_model(cfg=cfg):
                     plot_combined_results(**vis_data,
                                           rd_detections_pred=detections_rd,
                                           ra_detections_pred=detections_ra,
-                                          plot_ra_cartesian=False,
+                                          plot_ra_cartesian=True,
                                           )
 
             print("Tracking complete.")

@@ -102,7 +102,7 @@ def plot_image_RGB(map, save_path=None):
 def plot_radar_with_bboxes(ax, matrix, mask=None,
                            detections: list[RadarDetection] = None, # Changed from bboxes
                            matrix_type='RD', title='', color='red',
-                           mask_alpha=0.5, mask_cmap='jet'):
+                           mask_alpha=0.7, mask_cmap='jet'):
     """
     Plots a radar matrix (RD or RA) using radar_resolution for axis scaling,
     optionally overlays a mask and provided bounding boxes.
@@ -115,7 +115,7 @@ def plot_radar_with_bboxes(ax, matrix, mask=None,
         matrix_type (str): Type of matrix ('RD' or 'RA') to determine axis scaling.
         title (str): Title for the subplot.
         color (str): Color for bounding boxes.
-        mask_alpha (float): Transparency for the mask overlay.
+        mask_alpha (float): Transparency for the mask overlay as low as 0.0 (invisible) to 1.0 (opaque).
         mask_cmap (str): Colormap for the mask overlay.
     """
     if matrix is None:
@@ -174,9 +174,22 @@ def plot_radar_with_bboxes(ax, matrix, mask=None,
                 mask_vis = np.argmax(mask, axis=-1)
         else:
             mask_vis = mask
-        ax.imshow(mask_to_img(mask_vis), cmap=mask_cmap, alpha=mask_alpha, aspect='auto',
+
+        # --- Create alpha mask ---
+        alpha_mask = np.where(mask_vis == 0, 0.0, mask_alpha) # Background is invisible, others are 70% visible
+
+        # Plot only active mask regions using RGBA
+        cmap = plt.get_cmap(mask_cmap, 5)
+        mask_colored = cmap(mask_vis)
+        mask_colored[..., -1] = alpha_mask  # Replace alpha channel with our mask
+
+        ax.imshow(mask_colored, aspect='auto',
                   extent=(x_range[0], x_range[1], y_range[0], y_range[1]),
-                  origin='lower') # Match origin
+                  origin='lower')
+
+        # ax.imshow(mask_to_img(mask_vis), cmap=mask_cmap, alpha=mask_alpha, aspect='auto',
+        #           extent=(x_range[0], x_range[1], y_range[0], y_range[1]),
+        #           origin='lower') # Match origin
 
     # Replace the loop over bboxes with a loop over detections
     if detections is not None: # Check if detections list exists
