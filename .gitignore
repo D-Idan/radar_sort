@@ -52,3 +52,5 @@ ENV/
 *.ini
 configs/config.ini
 
+# External
+external/*
