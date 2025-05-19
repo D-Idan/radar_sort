@@ -5,8 +5,10 @@
 
 	"label_path": "/mnt/data/datasets/radial/gd/raw_data/labels_CVPR.csv",
 
-	"Data_Dir": "/mnt/data/datasets/radial/gd/raw_data/RECORD@2020-11-21_11.54.31",
+	"Data_Dir": "/mnt/data/datasets/radial/gd/raw_data/",
 
-	"Output_Folder": "/mnt/data/datasets/radial/gd/raw_data/ADC_Data"
+	"Output_Folder": "/mnt/data/datasets/radial/gd/raw_data/ADC_Data",
+
+	"target_value": "RECORD@2020-11-21_13.55.48"
 
 }

@@ -12,7 +12,11 @@ def main(config):
     RSP = RadarSignalProcessing(cal_table,method=config['Method'])
     labels = pd.read_csv(config['label_path'],sep=',',index_col=None)
 
-    records = np.unique(labels['dataset'])[:1]
+    target_value = config['target_value']
+    if target_value[:4] == 'RECORD'[:4]:
+        records = [target_value]
+    else:
+        records = np.unique(labels['dataset'])[:1]
     data_dir = config['Data_Dir']
 
     for i,record in enumerate(records):
@@ -31,7 +35,12 @@ def main(config):
             adc=RSP.run(sample['radar_ch0']['data'],sample['radar_ch1']['data'],sample['radar_ch2']['data'],sample['radar_ch3']['data'])
 
             filename = os.path.join(config['Output_Folder'],"adc_{:06d}".format(numSample))
-            np.save(filename,adc) 
+
+            if i == 0:
+                # Ensure the directory exists
+                os.makedirs(os.path.dirname(filename), exist_ok=True)
+
+            np.save(filename,adc)
 
             
 if __name__=='__main__':
