@@ -59,6 +59,7 @@ def main(config, checkpoint_filename,difficult):
     # Load the model
     dict = torch.load(checkpoint_filename, weights_only=False)
     net.load_state_dict(dict['net_state_dict'])
+    net = net.double()
     net.eval()
 
 
@@ -73,13 +74,14 @@ def main(config, checkpoint_filename,difficult):
             else:
                 intermediate = None
 
-        hmi = DisplayHMI(data[4], data[0],outputs,enc,config,intermediate)
+        if data[4]: # there is image
+            hmi = DisplayHMI(data[4], data[0],outputs,enc,config,intermediate)
 
-        cv2.imshow('FFTRadNet',hmi)
+            cv2.imshow('FFTRadNet',hmi)
 
-        # Press Q on keyboard to  exit
-        if cv2.waitKey(25) & 0xFF == ord('q'):
-            break
+            # Press Q on keyboard to  exit
+            if cv2.waitKey(25) & 0xFF == ord('q'):
+                break
 
     cv2.destroyAllWindows()
 

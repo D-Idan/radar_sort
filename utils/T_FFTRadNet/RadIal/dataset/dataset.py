@@ -119,18 +119,21 @@ class RADIal(Dataset):
                     radar_FFT[...,i] -= self.statistics['input_mean'][i]
                     radar_FFT[...,i] /= self.statistics['input_std'][i]
 
-        # # Read the segmentation map
-        # segmap_name = os.path.join(self.root_dir,'radar_Freespace',"freespace_{:06d}.png".format(sample_id))
-        # segmap = Image.open(segmap_name) # [512,900]
-        # # 512 pix for the range and 900 pix for the horizontal FOV (180deg)
-        # # We crop the fov to 89.6deg
-        # segmap = self.crop(segmap)
-        # # and we resize to half of its size
-        # segmap = np.asarray(self.resize(segmap))==255
+        # Read the segmentation map
+        segmap_name = os.path.join(self.root_dir, 'radar_Freespace', f"freespace_{sample_id:06d}.png")
+        segmap = None
+        if os.path.exists(segmap_name):
+            segmap = Image.open(segmap_name)  # [512,900]
+            # 512 pix for the range and 900 pix for the horizontal FOV (180deg)
+            # We crop the fov to 89.6deg
+            segmap = self.crop(segmap)
+            # and we resize to half of its size
+            segmap = np.asarray(self.resize(segmap)) == 255
 
         # Read the camera image
-        img_name = os.path.join(self.root_dir,'camera',"image_{:06d}.jpg".format(sample_id))
-        image = np.asarray(Image.open(img_name))
+        img_name = os.path.join(self.root_dir, 'camera', f"image_{sample_id:06d}.jpg")
+        image = None
+        if os.path.exists(img_name):
+            image = np.asarray(Image.open(img_name))
 
-        # return radar_FFT, segmap,out_label,box_labels,image
-        return radar_FFT, None,out_label,box_labels,image
+        return radar_FFT, segmap, out_label, box_labels, image

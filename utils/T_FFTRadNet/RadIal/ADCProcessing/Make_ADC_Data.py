@@ -40,7 +40,7 @@ def main(config):
                 # Ensure the directory exists
                 os.makedirs(os.path.dirname(filename), exist_ok=True)
 
-            np.save(filename,adc)
+                np.save(filename,adc)
 
             
 if __name__=='__main__':

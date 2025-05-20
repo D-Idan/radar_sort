@@ -74,7 +74,7 @@ def main(config, checkpoint,difficult):
 
 
     print('===========  Loading the model ==================:')
-    dict = torch.load(checkpoint)
+    dict = torch.load(checkpoint, weights_only=False)
     net.load_state_dict(dict['net_state_dict'])
 
     print('===========  Running the evaluation ==================:')
@@ -85,11 +85,15 @@ def main(config, checkpoint,difficult):
 
 
 if __name__=='__main__':
+
+    path_model_default = '/mnt/data/datasets/radial/gd/models/RADIal_SwinTransformer_ADC.pth'
+
+
     # PARSE THE ARGS
     parser = argparse.ArgumentParser(description='FFTRadNet Evaluation')
-    parser.add_argument('-c', '--config', default='config.json',type=str,
+    parser.add_argument('-c', '--config', default='./config/ADC_config.json',type=str,
                         help='Path to the config file (default: config.json)')
-    parser.add_argument('-r', '--checkpoint', default=None, type=str,
+    parser.add_argument('-r', '--checkpoint', default=path_model_default, type=str,
                         help='Path to the .pth model checkpoint to resume training')
     parser.add_argument('--difficult', action='store_true')
     args = parser.parse_args()

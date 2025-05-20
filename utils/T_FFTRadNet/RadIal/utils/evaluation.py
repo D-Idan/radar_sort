@@ -107,7 +107,8 @@ def run_FullEvaluation(net,loader,encoder,iou_threshold=0.5,config=None):
 
     iou_list = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
     for iou_ in iou_list:
-        results.append(GetFullMetrics(predictions['prediction']['objects'],predictions['label']['objects'],range_min=5,range_max=100,IOU_threshold=iou_))
+        if len(predictions['label']['objects']) > 0:
+            results.append(GetFullMetrics(predictions['prediction']['objects'],predictions['label']['objects'],range_min=5,range_max=100,IOU_threshold=iou_))
 
     mIoU = []
     for i in range(len(predictions['prediction']['freespace'])):
