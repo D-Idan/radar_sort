@@ -82,7 +82,7 @@ def main(config, checkpoint_filename,difficult):
             # Press Q on keyboard to  exit
             if cv2.waitKey(25) & 0xFF == ord('q'):
                 break
-        break
+        # break
     cv2.destroyAllWindows()
 
 

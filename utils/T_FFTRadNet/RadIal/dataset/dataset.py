@@ -134,6 +134,8 @@ class RADIal(Dataset):
         img_name = os.path.join(self.root_dir, 'camera', f"image_{sample_id:06d}.jpg")
         image = None
         if os.path.exists(img_name):
-            image = np.asarray(Image.open(img_name))
+            # image = np.asarray(Image.open(img_name))
+            image = np.array(Image.open(img_name))
+
 
         return radar_FFT, segmap, out_label, box_labels, image
