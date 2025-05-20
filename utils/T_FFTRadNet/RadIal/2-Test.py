@@ -74,7 +74,7 @@ def main(config, checkpoint_filename,difficult):
             else:
                 intermediate = None
 
-        if data[4]: # there is image
+        if data[4] is not None: # there is image
             hmi = DisplayHMI(data[4], data[0],outputs,enc,config,intermediate)
 
             cv2.imshow('FFTRadNet',hmi)
@@ -82,7 +82,7 @@ def main(config, checkpoint_filename,difficult):
             # Press Q on keyboard to  exit
             if cv2.waitKey(25) & 0xFF == ord('q'):
                 break
-
+        break
     cv2.destroyAllWindows()
 
 
