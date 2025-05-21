@@ -31,7 +31,7 @@ def parse_recording(folder):
 
     # 1. Open the REC file
     rec_file_name = recorder_folder_path.name+'_events_log.rec'
-    rec_file_path = recorder_folder_path/rec_file_name
+    rec_file_path = recorder_folder_path.parents[1]/recorder_folder_path.name/rec_file_name
 
     df = pd.read_csv(rec_file_path,header=None)
     data = df.values

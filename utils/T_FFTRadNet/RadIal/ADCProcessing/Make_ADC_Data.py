@@ -25,7 +25,7 @@ def main(config):
         print(i,". ",record)
         boxes = labels[labels.dataset == record]
         root_folder = os.path.join(data_dir,record)
-        db = SyncReader(root_folder,tolerance=20000,silent=True)
+        db = SyncReader(root_folder,tolerance=200000,silent=True)
 
         unique_indices = np.unique(boxes['index'])
 

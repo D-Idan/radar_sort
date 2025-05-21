@@ -6,14 +6,15 @@ import numpy as np
 from model.FFTRadNet_ViT import FFTRadNet_ViT
 from model.FFTRadNet_ViT import FFTRadNet_ViT_ADC
 from dataset.dataset import RADIal
-from dataset.encoder import ra_encoder
+# from dataset.encoder import ra_encoder
+from dataset.encoder_NEW import RAEncoder as ra_encoder
 import cv2
 from utils.util import DisplayHMI
 
 def main(config, checkpoint_filename,difficult):
 
     # set device
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Load the dataset
     enc = ra_encoder(geometry = config['dataset']['geometry'],
@@ -54,10 +55,10 @@ def main(config, checkpoint_filename,difficult):
                             encoder=enc.encode,
                             difficult=True,perform_FFT='ADC')
 
-    net.to('cuda')
+    net.to(device)
 
     # Load the model
-    dict = torch.load(checkpoint_filename, weights_only=False)
+    dict = torch.load(checkpoint_filename, weights_only=False, map_location=torch.device(device))
     net.load_state_dict(dict['net_state_dict'])
     net = net.double()
     net.eval()
@@ -65,7 +66,7 @@ def main(config, checkpoint_filename,difficult):
 
     for data in dataset:
         # data is composed of [radar_FFT, segmap,out_label,box_labels,image]
-        inputs = torch.tensor(data[0]).permute(2,0,1).to('cuda').unsqueeze(0)
+        inputs = torch.tensor(data[0]).permute(2,0,1).to(device).unsqueeze(0)
         with torch.set_grad_enabled(False):
             outputs = net(inputs)
             if config['data_mode'] == 'ADC':
@@ -89,7 +90,7 @@ def main(config, checkpoint_filename,difficult):
 if __name__=='__main__':
 
     # path_model_default = '/mnt/data/datasets/radial/gd/models/RADIal_SwinTransformer_ADC.pth'
-    path_model_default = '/mnt/data/datasets/radial/gd/models/RADIal_SwinTransformer_ADC.pth'
+    path_model_default = '/Volumes/ELEMENTS/datasets/Trained_Models/RADIal_SwinTransformer_ADC.pth'
 
     # PARSE THE ARGS
     parser = argparse.ArgumentParser(description='FFTRadNet test')

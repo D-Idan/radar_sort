@@ -3,6 +3,7 @@ import json
 import argparse
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pandas as pd
 import imageio
@@ -36,7 +37,7 @@ def extract_all(config):
     ensure_dirs(base, subdirs)
 
     # Initialize readers and processors
-    db = SyncReader(root_folder, tolerance=20000, silent=True)
+    db = SyncReader(root_folder, tolerance=200000, silent=True)
     RSP_PC = RadarSignalProcessing(cal_table, method='PC')
     RSP_RD = RadarSignalProcessing(cal_table, method='RD')
     RSP_RA = RadarSignalProcessing(cal_table, method='RA')
@@ -56,7 +57,10 @@ def extract_all(config):
         # 2. camera -> save jpg
         cam = sample['camera']['data']
         img_path = os.path.join(base, 'camera', f'image_{tag}.jpg')
-        imageio.imwrite(img_path, cam)
+        # Resize to (width=960, height=540)
+        resized = cv2.resize(cam, (960, 540))
+        cv2.imwrite(img_path, resized)
+        # imageio.imwrite(img_path, cam)
 
         # # 3. laser_PCL -> save as NPY
         # pcl = sample['scala']['data']
