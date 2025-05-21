@@ -1,14 +1,14 @@
 {
-	"Calibration": "/mnt/data/datasets/radial/gd/raw_data/CalibrationTable.npy",
+	"Calibration": "/Volumes/ELEMENTS/datasets/radial/CalibrationTable.npy",
 
 	"Method": "ADC",
 
-	"label_path": "/mnt/data/datasets/radial/gd/raw_data/labels_CVPR.csv",
+	"label_path": "/Volumes/ELEMENTS/datasets/radial/labels_CVPR.csv",
 
-	"Data_Dir": "/mnt/data/datasets/radial/gd/raw_data/",
+	"Data_Dir": "/Volumes/ELEMENTS/datasets/radial",
 
-	"Output_Folder": "/mnt/data/datasets/radial/gd/raw_data/ADC_Data",
+	"Output_Folder": "/Volumes/ELEMENTS/datasets/radial/ADC_Data",
 
-	"target_value": "RECORD@2020-11-22_12.37.16"
+	"target_value": "RECORD@2020-11-22_12.45.05"
 
 }

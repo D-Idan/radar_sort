@@ -1,7 +1,7 @@
 import os
-import cupy as cp
+# import cupy as cp
 import numpy as np
-import mkl_fft
+# import mkl_fft
 from scipy import signal
 import torch
 import math
@@ -140,12 +140,37 @@ class RadarSignalProcessing():
 
         # 2- Remoce DC offset
         complex_adc = complex_adc - np.mean(complex_adc, axis=(0,1))
+        complex_adc = torch.from_numpy(complex_adc)
+        if not complex_adc.is_complex():
+            complex_adc = complex_adc.to(torch.complex64)  # Or torch.complex128 depending on your data precision
+
+        # Convert range_fft_coef from NumPy array to PyTorch tensor
+        if type(self.range_fft_coef) is np.ndarray:
+            self.range_fft_coef = torch.from_numpy(self.range_fft_coef)
+        if not self.range_fft_coef.is_complex():
+            self.range_fft_coef = self.range_fft_coef.to(torch.complex64)  # Or torch.complex128
+
+        # Convert doppler_fft_coef from NumPy array to PyTorch tensor
+        if type(self.doppler_fft_coef) is np.ndarray:
+            self.doppler_fft_coef = torch.from_numpy(self.doppler_fft_coef)
+        if not self.doppler_fft_coef.is_complex():
+            self.doppler_fft_coef = self.doppler_fft_coef.to(torch.complex64)  # Or torch.complex128
 
         # 3- Range FFTs
-        range_fft = mkl_fft.fft(np.multiply(complex_adc,self.range_fft_coef),self.numSamplePerChirp,axis=0)
+        # Original: range_fft = mkl_fft.fft(np.multiply(complex_adc,self.range_fft_coef),self.numSamplePerChirp,axis=0)
+        range_fft = torch.fft.fft(
+            torch.multiply(complex_adc, self.range_fft_coef),
+            n=self.numSamplePerChirp,
+            dim=0
+        )
 
-        # 4- Doppler FFts
-        RD_spectrums = mkl_fft.fft(np.multiply(range_fft,self.doppler_fft_coef),self.numChirps,axis=1)
+        # 4- Doppler FFTs
+        # Original: RD_spectrums = mkl_fft.fft(np.multiply(range_fft,self.doppler_fft_coef),self.numChirps,axis=1)
+        RD_spectrums = torch.fft.fft(
+            torch.multiply(range_fft, self.doppler_fft_coef),
+            n=self.numChirps,
+            dim=1
+        )
 
         if(self.method=='RD'):
             return RD_spectrums

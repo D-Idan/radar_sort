@@ -6,10 +6,12 @@ import argparse
 from DBReader.DBReader import SyncReader
 import pandas as pd
 import os
+from tqdm import tqdm
+
 
 def main(config):
     cal_table = config['Calibration']
-    RSP = RadarSignalProcessing(cal_table,method=config['Method'])
+    RSP = RadarSignalProcessing(cal_table,method=config['Method'], lib='PyTorch')
     labels = pd.read_csv(config['label_path'],sep=',',index_col=None)
 
     target_value = config['target_value']
@@ -27,7 +29,7 @@ def main(config):
 
         unique_indices = np.unique(boxes['index'])
 
-        for index in unique_indices:
+        for index in tqdm(unique_indices, desc=f"Processing {record}"):
 
             numSample = boxes[boxes['index'] == index]['numSample'].iloc[0]
             sample = db.GetSensorData(index)

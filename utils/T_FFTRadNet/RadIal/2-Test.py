@@ -88,6 +88,7 @@ def main(config, checkpoint_filename,difficult):
 
 if __name__=='__main__':
 
+    # path_model_default = '/mnt/data/datasets/radial/gd/models/RADIal_SwinTransformer_ADC.pth'
     path_model_default = '/mnt/data/datasets/radial/gd/models/RADIal_SwinTransformer_ADC.pth'
 
     # PARSE THE ARGS
