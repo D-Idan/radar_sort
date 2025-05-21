@@ -51,6 +51,7 @@ ENV/
 # Config
 *.ini
 configs/config.ini
+*config*json
 
 # External
 external/*
