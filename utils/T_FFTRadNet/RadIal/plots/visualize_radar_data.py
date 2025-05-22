@@ -17,7 +17,7 @@ def draw_bbox(image, bbox, label_text):
     return image
 
 
-def generate_figure(sample, labels, image_path, calibration_path):
+def generate_figure(rd_path, ra_path, labels, image_path):
     img = cv2.imread(image_path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
@@ -32,23 +32,20 @@ def generate_figure(sample, labels, image_path, calibration_path):
     axs[0, 0].set_title("Camera Image with BBoxes")
     axs[0, 0].axis('off')
 
-    # Point Cloud
-    rsp_pc = RadarSignalProcessing(calibration_path, method='PC')
-    pc = rsp_pc.run(sample['radar_ch0']['data'], sample['radar_ch1']['data'], sample['radar_ch2']['data'], sample['radar_ch3']['data'])
-    axs[0, 1].polar(pc[:, 2], pc[:, 0], '.')
-    axs[0, 1].set_title("Bird-Eye View (BEV) - Polar Plot")
+    # # Point Cloud
+    # rsp_pc = RadarSignalProcessing(calibration_path, method='PC')
+    # pc = rsp_pc.run(sample['radar_ch0']['data'], sample['radar_ch1']['data'], sample['radar_ch2']['data'], sample['radar_ch3']['data'])
+    # axs[0, 1].polar(pc[:, 2], pc[:, 0], '.')
+    # axs[0, 1].set_title("Bird-Eye View (BEV) - Polar Plot")
 
     # Range-Doppler
-    rsp_rd = RadarSignalProcessing(calibration_path, method='RD')
-    rd = rsp_rd.run(sample['radar_ch0']['data'], sample['radar_ch1']['data'], sample['radar_ch2']['data'], sample['radar_ch3']['data'])
-    rd_map = np.log10(np.sum(np.abs(rd), axis=2) + 1e-6)
+    rd_map = np.load(rd_path)
     axs[1, 0].imshow(rd_map)
     axs[1, 0].set_title("Range-Doppler Map")
     axs[1, 0].axis('off')
 
     # Range-Azimuth
-    rsp_ra = RadarSignalProcessing(calibration_path, method='RA', device='cuda', lib='CuPy')
-    ra = rsp_ra.run(sample['radar_ch0']['data'], sample['radar_ch1']['data'], sample['radar_ch2']['data'], sample['radar_ch3']['data'])
+    ra = np.load(ra_path)
     axs[1, 1].imshow(ra)
     axs[1, 1].set_title("Range-Azimuth Map")
     axs[1, 1].axis('off')
@@ -57,34 +54,42 @@ def generate_figure(sample, labels, image_path, calibration_path):
     return fig
 
 
-def main(labels_csv, image_dir, adc_dir, calibration_path, output_dir):
+def main(labels_csv, image_dir, rd_dir, ra_dir, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     labels_df = pd.read_csv(labels_csv, sep='\t|,', engine='python')
 
     dataset = labels_df['dataset'].unique()
 
-    dataset_path = Path(adc_dir).parent
+    dataset_path = Path(image_dir).parent
     if not os.path.isdir(dataset_path):
         print(f"Skipping {dataset}, directory not found.")
 
-    db = SyncReader(dataset_path)
-
-    sample_ids = labels_df[labels_df['dataset'] == dataset]['numSample'].unique()
+    sample_ids = labels_df[labels_df['dataset'].isin(dataset)]['numSample'].unique()
     for sample_id in sample_ids:
-        labels = labels_df[(labels_df['dataset'] == dataset) & (labels_df['numSample'] == sample_id)]
+
+        labels = labels_df[(labels_df['dataset'].isin(dataset)) & (labels_df['numSample'] == sample_id)]
+
         image_filename = f"image_{sample_id:06d}.jpg"
         image_path = os.path.join(image_dir, image_filename)
         if not os.path.exists(image_path):
             print(f"Image not found: {image_path}")
             continue
 
-        try:
-            sample = db.GetSensorData(sample_id)
-        except Exception as e:
-            print(f"Failed to load sample {sample_id} from {dataset}: {e}")
+        rd_filename = f"rd_{sample_id:06d}.npy"
+        rd_path = os.path.join(rd_dir, rd_filename)
+        if not os.path.exists(image_path):
+            print(f"Image not found: {image_path}")
             continue
 
-        fig = generate_figure(sample, labels, image_path, calibration_path)
+        ra_filename = f"ra_{sample_id:06d}.npy"
+        ra_path = os.path.join(ra_dir, ra_filename)
+        if not os.path.exists(image_path):
+            print(f"Image not found: {image_path}")
+            continue
+
+
+
+        fig = generate_figure(rd_path, ra_path, labels, image_path)
         output_path = os.path.join(output_dir, f"viz_{sample_id:06d}.png")
         fig.savefig(output_path)
         plt.close(fig)
@@ -94,13 +99,16 @@ def main(labels_csv, image_dir, adc_dir, calibration_path, output_dir):
 if __name__ == '__main__':
     import argparse
 
-    path_config_default = Path('/Users/daniel/Idan/University/Masters/Thesis/2024/radar_sort/utils/T_FFTRadNet/RadIal/ADCProcessing/data_config.json')
-    path_output_default = Path('/Volumes/ELEMENTS/datasets/radial/visualizations')
+    path_repo = Path('/Users/daniel/Idan/University/Masters/Thesis/2024/radar_sort/utils').exists()
+    if not path_repo:
+        path_repo = Path('/mnt/data/myprojects/PycharmProjects/thesis_repos/radar_sort/utils')
+
+    path_config_default = path_repo / Path('T_FFTRadNet/RadIal/ADCProcessing/data_config.json')
 
     parser = argparse.ArgumentParser(description='Radar-Camera Visualization Script')
     parser.add_argument('-c', '--config', default=str(path_config_default),type=str,
                         help='Path to the config file (default: config.json)')
-    parser.add_argument('--output_dir', default=path_output_default, help='Directory to save output visualizations')
+    parser.add_argument('--output_dir', default=None, help='Directory to save output visualizations')
 
     args = parser.parse_args()
 
@@ -108,15 +116,17 @@ if __name__ == '__main__':
 
     record = config['target_value']
     root_folder = Path(config['Data_Dir'], 'RadIal_Data',record)
-    calibration_path = Path(config['Calibration'])
     labels_csv = Path(root_folder, 'labels.csv')
     image_dir = Path(root_folder, 'camera')
-    adc_dir = Path(root_folder, 'ADC_Data')
+    rd_dir = Path(root_folder, 'radar_RD')
+    ra_dir = Path(root_folder, 'radar_RA')
 
     # Prepare output folder structure
-    output_dir = Path(args.output_dir)
+    output_dir = ra_dir.parent / 'output_visualizations'
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
     if not output_dir.exists():
         os.makedirs(output_dir, exist_ok=True)
 
 
-    main(labels_csv, image_dir, adc_dir, calibration_path, output_dir)
+    main(labels_csv, image_dir, rd_dir, ra_dir, output_dir)
