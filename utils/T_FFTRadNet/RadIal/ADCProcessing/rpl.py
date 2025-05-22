@@ -6,6 +6,14 @@ from scipy import signal
 import torch
 import math
 
+def transpose_tensor(x):
+    if isinstance(x, np.ndarray):
+        return x.transpose()
+    elif isinstance(x, torch.Tensor):
+        return x.permute(*reversed(range(x.ndim)))
+    else:
+        raise TypeError(f"Unsupported tensor type: {type(x)}")
+
 class CA_CFAR():
     """
     Description:
@@ -242,7 +250,7 @@ class RadarSignalProcessing():
             # Multiply with Hamming window to reduce side lobes
             MIMO_Spectrum = np.multiply(MIMO_Spectrum,self.window)
 
-            Azimuth_spec = np.abs(self.CalibMat@MIMO_Spectrum.transpose())
+            Azimuth_spec = np.abs(self.CalibMat@np.array(MIMO_Spectrum).transpose())
             Azimuth_spec = Azimuth_spec.reshape(self.AoA_mat['Signal'].shape[0],RD_spectrums.shape[0],RD_spectrums.shape[1])
 
             RA_map = np.sum(np.abs(Azimuth_spec),axis=2)
@@ -262,7 +270,7 @@ class RadarSignalProcessing():
                 return RA_map.transpose().get()
             else:
 
-                MIMO_Spectrum = torch.from_numpy(MIMO_Spectrum).to('cuda')
+                MIMO_Spectrum = torch.Tensor(MIMO_Spectrum).to('cuda')
                 # Multiply with Hamming window to reduce side lobes
                 MIMO_Spectrum = torch.transpose(torch.multiply(MIMO_Spectrum,self.window),1,0).cfloat()
                 Azimuth_spec = torch.abs(torch.matmul(self.CalibMat,MIMO_Spectrum))
