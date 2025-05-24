@@ -68,13 +68,15 @@ def generate_figure(rd_path, ra_path, labels, image_path):
 
     # Range-Doppler
     rd_map = np.load(rd_path)
-    axs[1, 0].imshow(rd_map, aspect='auto')  # Add aspect='auto'
+    axs[1, 0].imshow(rd_map, aspect='auto', origin='lower')
+    axs[1, 0].invert_xaxis()  # Add if Doppler should increase left-to-right
     axs[1, 0].set_title("Range-Doppler Map")
     # axs[1, 0].axis('off')
 
     # Range-Azimuth
     ra = np.load(ra_path)
-    axs[1, 1].imshow(ra, aspect='auto')  # Add aspect='auto'
+    axs[1, 1].imshow(ra, aspect='auto', origin='lower')
+    axs[1, 1].invert_xaxis()  # Makes azimuth angles match camera perspective
     axs[1, 1].set_title("Range-Azimuth Map")
     # axs[1, 1].axis('off')
 
