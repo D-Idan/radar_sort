@@ -68,15 +68,47 @@ def generate_figure(rd_path, ra_path, labels, image_path):
 
     # Range-Doppler
     rd_map = np.load(rd_path)
-    axs[1, 0].imshow(rd_map)
+    axs[1, 0].imshow(rd_map, aspect='auto')  # Add aspect='auto'
     axs[1, 0].set_title("Range-Doppler Map")
-    axs[1, 0].axis('off')
+    # axs[1, 0].axis('off')
 
     # Range-Azimuth
     ra = np.load(ra_path)
-    axs[1, 1].imshow(ra)
+    axs[1, 1].imshow(ra, aspect='auto')  # Add aspect='auto'
     axs[1, 1].set_title("Range-Azimuth Map")
-    axs[1, 1].axis('off')
+    # axs[1, 1].axis('off')
+
+    # For Range-Doppler Map
+    rd_height, rd_width = rd_map.shape[:2]
+
+    # Set RD axes labels
+    max_doppler = (rd_width // 2) * 0.1  # Max Doppler based on map width
+    doppler_ticks = np.linspace(-max_doppler, max_doppler, 5)
+    x_ticks_rd = (doppler_ticks / 0.1) + (rd_width // 2)  # Convert to pixel positions
+    axs[1, 0].set_xticks(x_ticks_rd)
+    axs[1, 0].set_xticklabels([f"{tick:.1f}" for tick in doppler_ticks])
+    axs[1, 0].set_xlabel("Doppler Velocity (m/s)")
+
+    range_ticks = [0, 20, 40, 60, 80, 100]
+    y_ticks_rd = [(tick / 103) * rd_height for tick in range_ticks]
+    axs[1, 0].set_yticks(y_ticks_rd)
+    axs[1, 0].set_yticklabels([f"{tick}m" for tick in range_ticks])
+    axs[1, 0].set_ylabel("Range (m)")
+
+    # For Range-Azimuth Map
+    ra_height, ra_width = ra.shape[:2]
+
+    # Set RA axes labels
+    azimuth_ticks = [-90, -45, 0, 45, 90]
+    x_ticks_ra = [((tick + 90) / 180) * ra_width for tick in azimuth_ticks]
+    axs[1, 1].set_xticks(x_ticks_ra)
+    axs[1, 1].set_xticklabels([f"{tick}°" for tick in azimuth_ticks])
+    axs[1, 1].set_xlabel("Azimuth Angle (degrees)")
+
+    y_ticks_ra = [(tick / 103) * ra_height for tick in range_ticks]
+    axs[1, 1].set_yticks(y_ticks_ra)
+    axs[1, 1].set_yticklabels([f"{tick}m" for tick in range_ticks])
+    axs[1, 1].set_ylabel("Range (m)")
 
     # Add radar labels to RD and RA maps
     for _, row in labels.iterrows():
