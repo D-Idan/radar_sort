@@ -141,7 +141,7 @@ def DisplayHMI(image, input,model_outputs,encoder,config,intermediate=None):
 
     ## Image
     for box in pred_obj:
-        box = box[1:]
+        box = box[1:] # # [score, x1, y1, x2, y2, x3, y3, x4, y4, range, azimuth]
         u1,v1 = worldToImage(-box[2],box[1],0)
         u2,v2 = worldToImage(-box[0],box[1],1.6)
 
