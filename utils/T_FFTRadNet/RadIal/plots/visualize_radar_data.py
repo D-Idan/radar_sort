@@ -99,8 +99,8 @@ def main(labels_csv, image_dir, rd_dir, ra_dir, output_dir):
 if __name__ == '__main__':
     import argparse
 
-    path_repo = Path('/Users/daniel/Idan/University/Masters/Thesis/2024/radar_sort/utils').exists()
-    if not path_repo:
+    path_repo = Path('/Users/daniel/Idan/University/Masters/Thesis/2024/radar_sort/utils')
+    if not path_repo.exists():
         path_repo = Path('/mnt/data/myprojects/PycharmProjects/thesis_repos/radar_sort/utils')
 
     path_config_default = path_repo / Path('T_FFTRadNet/RadIal/ADCProcessing/data_config.json')
