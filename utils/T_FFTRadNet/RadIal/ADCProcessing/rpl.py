@@ -243,6 +243,7 @@ class RadarSignalProcessing():
             DopplerBinSeq = np.remainder(doppler_bin+ self.dividend_constant_arr, self.numChirps)
             DopplerBinSeq = np.concatenate([[DopplerBinSeq[0]],DopplerBinSeq[5:]])
             doppler_indexes.append(DopplerBinSeq)
+        doppler_indexes = torch.from_numpy(np.array(doppler_indexes)).long()  # ✅ Efficient format
 
         MIMO_Spectrum = RD_spectrums[:,doppler_indexes,:].reshape(RD_spectrums.shape[0]*RD_spectrums.shape[1],-1)
 
