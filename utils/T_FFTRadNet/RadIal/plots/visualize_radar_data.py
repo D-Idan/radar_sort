@@ -9,6 +9,30 @@ import cv2
 from utils.T_FFTRadNet.RadIal.ADCProcessing.DBReader.DBReader import SyncReader
 from utils.T_FFTRadNet.RadIal.ADCProcessing.rpl import RadarSignalProcessing
 
+# Camera parameters
+camera_matrix = np.array([[1.84541929e+03, 0.00000000e+00, 8.55802458e+02],
+                 [0.00000000e+00 , 1.78869210e+03 , 6.07342667e+02],[0.,0.,1]])
+dist_coeffs = np.array([2.51771602e-01,-1.32561698e+01,4.33607564e-03,-6.94637533e-03,5.95513933e+01])
+rvecs = np.array([1.61803058, 0.03365624,-0.04003127])
+tvecs = np.array([0.09138029,1.38369885,1.43674736])
+ImageWidth = 1920
+ImageHeight = 1080
+
+
+# Input Images Shape
+input_shape = (540, 960)  # (height, width)
+
+# Scale factor for resizing
+SCALE_FACTOR = (input_shape[1] / ImageWidth, input_shape[0] / ImageHeight)
+
+def image_scale_factor(image):
+    """
+    Calculate the scale factor for resizing the image to the input shape.
+    """
+    height, width = image.shape[:2]
+    scale_width = width / ImageWidth
+    scale_height = height / ImageHeight
+    return scale_width, scale_height
 
 def draw_bbox(image, bbox, label_text):
     x1, y1, x2, y2 = map(int, bbox)
@@ -24,6 +48,10 @@ def generate_figure(rd_path, ra_path, labels, image_path):
     # Draw bounding boxes
     for _, row in labels.iterrows():
         bbox = (row['x1_pix'], row['y1_pix'], row['x2_pix'], row['y2_pix'])
+        # Scale bounding box coordinates
+        scale_factor = image_scale_factor(img)
+        bbox = (int(bbox[0] * scale_factor[0]), int(bbox[1] * scale_factor[1]),
+                int(bbox[2] * scale_factor[0]), int(bbox[3] * scale_factor[1]))
         label = f"R:{row['radar_R_m']:.1f} A:{row['radar_A_deg']:.1f} D:{row['radar_D_mps']:.1f}"
         img = draw_bbox(img, bbox, label)
 

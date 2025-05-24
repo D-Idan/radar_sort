@@ -37,7 +37,7 @@ def extract_all(config):
     ensure_dirs(base, subdirs)
 
     # Initialize readers and processors
-    db = SyncReader(root_folder, tolerance=200000, silent=True)
+    db = SyncReader(root_folder, tolerance=20000, silent=True)
     RSP_PC = RadarSignalProcessing(cal_table, method='PC', lib='PyTorch')
     RSP_RD = RadarSignalProcessing(cal_table, method='RD', lib='PyTorch')
     RSP_RA = RadarSignalProcessing(cal_table, method='RA', lib='PyTorch')
