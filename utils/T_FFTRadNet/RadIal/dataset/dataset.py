@@ -138,4 +138,4 @@ class RADIal(Dataset):
             image = np.array(Image.open(img_name))
 
 
-        return radar_FFT, segmap, out_label, box_labels, image
+        return radar_FFT, segmap, out_label, box_labels, image, sample_id
