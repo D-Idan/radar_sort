@@ -78,6 +78,40 @@ def generate_figure(rd_path, ra_path, labels, image_path):
     axs[1, 1].set_title("Range-Azimuth Map")
     axs[1, 1].axis('off')
 
+    # Add radar labels to RD and RA maps
+    for _, row in labels.iterrows():
+        # Convert radar measurements to pixel coordinates
+        # For Range-Doppler Map
+        rd_height, rd_width = rd_map.shape[:2]
+        range_rd = row['radar_R_m']
+        doppler = row['radar_D_mps']
+
+        # Calculate RD y-coordinate (range)
+        y_rd = int((range_rd / 103) * rd_height)
+        y_rd = np.clip(y_rd, 0, rd_height - 1)
+
+        # Calculate RD x-coordinate (Doppler, assuming centered at 0)
+        doppler_bins = doppler / 0.1  # Each bin = 0.1 m/s
+        x_rd = (rd_width // 2) + int(doppler_bins)
+        x_rd = np.clip(x_rd, 0, rd_width - 1)
+
+        axs[1, 0].scatter(x_rd, y_rd, s=50, color='red', marker='o', alpha=0.7)
+
+        # For Range-Azimuth Map
+        ra_height, ra_width = ra.shape[:2]
+        azimuth = row['radar_A_deg']
+        range_ra = row['radar_R_m']
+
+        # Calculate RA x-coordinate (azimuth)
+        x_ra = int(((azimuth + 90) / 180) * ra_width)
+        x_ra = np.clip(x_ra, 0, ra_width - 1)
+
+        # Calculate RA y-coordinate (range)
+        y_ra = int((range_ra / 103) * ra_height)
+        y_ra = np.clip(y_ra, 0, ra_height - 1)
+
+        axs[1, 1].scatter(x_ra, y_ra, s=50, color='red', marker='o', alpha=0.7)
+
     plt.tight_layout()
     return fig
 
