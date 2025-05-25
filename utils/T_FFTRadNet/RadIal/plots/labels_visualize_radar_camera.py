@@ -1,192 +1,166 @@
 import json
 import os
 from pathlib import Path
-
-import pandas as pd
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import cv2
+
 from utils.T_FFTRadNet.RadIal.ADCProcessing.DBReader.DBReader import SyncReader
 from utils.T_FFTRadNet.RadIal.ADCProcessing.rpl import RadarSignalProcessing
 
-# Camera parameters
-camera_matrix = np.array([[1.84541929e+03, 0.00000000e+00, 8.55802458e+02],
-                 [0.00000000e+00 , 1.78869210e+03 , 6.07342667e+02],[0.,0.,1]])
-dist_coeffs = np.array([2.51771602e-01,-1.32561698e+01,4.33607564e-03,-6.94637533e-03,5.95513933e+01])
-rvecs = np.array([1.61803058, 0.03365624,-0.04003127])
-tvecs = np.array([0.09138029,1.38369885,1.43674736])
-ImageWidth = 1920
-ImageHeight = 1080
+# --- Constants and Camera Parameters ---
+CAMERA_MATRIX = np.array([
+    [1845.41929, 0.0, 855.802458],
+    [0.0, 1788.69210, 607.342667],
+    [0.0, 0.0, 1.0]
+])
+DIST_COEFFS = np.array([0.251771602, -13.2561698, 0.00433607564, -0.00694637533, 59.5513933])
+RVEC = np.array([1.61803058, 0.03365624, -0.04003127])
+TVEC = np.array([0.09138029, 1.38369885, 1.43674736])
+IMAGE_WIDTH, IMAGE_HEIGHT = 1920, 1080
+INPUT_SHAPE = (540, 960)  # (height, width)
+SCALE_FACTOR = (INPUT_SHAPE[1] / IMAGE_WIDTH, INPUT_SHAPE[0] / IMAGE_HEIGHT)
 
 
-# Input Images Shape
-input_shape = (540, 960)  # (height, width)
-
-# Scale factor for resizing
-SCALE_FACTOR = (input_shape[1] / ImageWidth, input_shape[0] / ImageHeight)
-
-def image_scale_factor(image):
-    """
-    Calculate the scale factor for resizing the image to the input shape.
-    """
+# --- Utility Functions ---
+def get_scale_factor(image):
+    """Return width and height scale factors for a given image."""
     height, width = image.shape[:2]
-    scale_width = width / ImageWidth
-    scale_height = height / ImageHeight
-    return scale_width, scale_height
+    return width / IMAGE_WIDTH, height / IMAGE_HEIGHT
 
-def draw_bbox(image, bbox, label_text):
+
+def draw_bounding_box(image, bbox, label):
+    """Draw a labeled bounding box on the image."""
     x1, y1, x2, y2 = map(int, bbox)
     cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-    cv2.putText(image, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
     return image
 
 
-def generate_figure(rd_path, ra_path, labels, image_path):
-    img = cv2.imread(image_path)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+def annotate_radar_point(ax, x, y):
+    """Plot a radar point on the given axes."""
+    ax.scatter(x, y, s=50, color='red', marker='o', alpha=0.7)
+
+
+def convert_rd_coords(range_m, doppler_mps, shape):
+    """Convert radar range and doppler to image coordinates."""
+    height, width = shape
+    y = np.clip(int((range_m / 103) * height), 0, height - 1)
+    x = np.clip(int((doppler_mps / 0.1) + (width / 2)), 0, width - 1)
+    return x, y
+
+
+def convert_ra_coords(range_m, azimuth_deg, shape):
+    """Convert radar range and azimuth to image coordinates."""
+    height, width = shape
+    y = np.clip(int((range_m / 103) * height), 0, height - 1)
+    x = np.clip(int(((azimuth_deg + 90) / 180) * width), 0, width - 1)
+    return x, y
+
+
+# --- Visualization Function ---
+def generate_figure(rd_path, ra_path, labels_df, image_path):
+    image = cv2.imread(str(image_path))
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    scale_w, scale_h = get_scale_factor(image)
 
     # Draw bounding boxes
-    for _, row in labels.iterrows():
-        bbox = (row['x1_pix'], row['y1_pix'], row['x2_pix'], row['y2_pix'])
-        # Scale bounding box coordinates
-        scale_factor = image_scale_factor(img)
-        bbox = (int(bbox[0] * scale_factor[0]), int(bbox[1] * scale_factor[1]),
-                int(bbox[2] * scale_factor[0]), int(bbox[3] * scale_factor[1]))
+    for _, row in labels_df.iterrows():
+        bbox = (
+            row['x1_pix'] * scale_w,
+            row['y1_pix'] * scale_h,
+            row['x2_pix'] * scale_w,
+            row['y2_pix'] * scale_h,
+        )
         label = f"R:{row['radar_R_m']:.1f} A:{row['radar_A_deg']:.1f} D:{row['radar_D_mps']:.1f}"
-        img = draw_bbox(img, bbox, label)
+        image = draw_bounding_box(image, bbox, label)
 
     fig, axs = plt.subplots(2, 2, figsize=(16, 12))
-    axs[0, 0].imshow(img)
+
+    # Image with bounding boxes
+    axs[0, 0].imshow(image)
     axs[0, 0].set_title("Camera Image with BBoxes")
     axs[0, 0].axis('off')
 
-    # # Point Cloud
-    # rsp_pc = RadarSignalProcessing(calibration_path, method='PC')
-    # pc = rsp_pc.run(sample['radar_ch0']['data'], sample['radar_ch1']['data'], sample['radar_ch2']['data'], sample['radar_ch3']['data'])
-    # axs[0, 1].polar(pc[:, 2], pc[:, 0], '.')
-    # axs[0, 1].set_title("Bird-Eye View (BEV) - Polar Plot")
-
-    # Range-Doppler
+    # Load radar maps
     rd_map = np.load(rd_path)
+    ra_map = np.load(ra_path)
+
+    # Range-Doppler map
     axs[1, 0].imshow(rd_map, aspect='auto', origin='lower')
-    axs[1, 0].invert_xaxis()  # Add if Doppler should increase left-to-right
+    axs[1, 0].invert_xaxis()
     axs[1, 0].set_title("Range-Doppler Map")
-    # axs[1, 0].axis('off')
 
-    # Range-Azimuth
-    ra = np.load(ra_path)
-    axs[1, 1].imshow(ra, aspect='auto', origin='lower')
-    axs[1, 1].invert_xaxis()  # Makes azimuth angles match camera perspective
-    axs[1, 1].set_title("Range-Azimuth Map")
-    # axs[1, 1].axis('off')
-
-    # For Range-Doppler Map
-    rd_height, rd_width = rd_map.shape[:2]
-
-    # Set RD axes labels
-    max_doppler = (rd_width // 2) * 0.1  # Max Doppler based on map width
-    doppler_ticks = np.linspace(-max_doppler, max_doppler, 5)
-    x_ticks_rd = (doppler_ticks / 0.1) + (rd_width // 2)  # Convert to pixel positions
+    # Axis labels for RD
+    rd_height, rd_width = rd_map.shape
+    doppler_ticks = np.linspace(-rd_width // 2 * 0.1, rd_width // 2 * 0.1, 5)
+    x_ticks_rd = doppler_ticks / 0.1 + rd_width / 2
     axs[1, 0].set_xticks(x_ticks_rd)
-    axs[1, 0].set_xticklabels([f"{tick:.1f}" for tick in doppler_ticks])
+    axs[1, 0].set_xticklabels([f"{t:.1f}" for t in doppler_ticks])
     axs[1, 0].set_xlabel("Doppler Velocity (m/s)")
 
     range_ticks = [0, 20, 40, 60, 80, 100]
-    y_ticks_rd = [(tick / 103) * rd_height for tick in range_ticks]
+    y_ticks_rd = [(r / 103) * rd_height for r in range_ticks]
     axs[1, 0].set_yticks(y_ticks_rd)
-    axs[1, 0].set_yticklabels([f"{tick}m" for tick in range_ticks])
+    axs[1, 0].set_yticklabels([f"{r}m" for r in range_ticks])
     axs[1, 0].set_ylabel("Range (m)")
 
-    # For Range-Azimuth Map
-    ra_height, ra_width = ra.shape[:2]
+    # Range-Azimuth map
+    axs[1, 1].imshow(ra_map, aspect='auto', origin='lower')
+    axs[1, 1].invert_xaxis()
+    axs[1, 1].set_title("Range-Azimuth Map")
 
-    # Set RA axes labels
+    ra_height, ra_width = ra_map.shape
     azimuth_ticks = [-90, -45, 0, 45, 90]
-    x_ticks_ra = [((tick + 90) / 180) * ra_width for tick in azimuth_ticks]
+    x_ticks_ra = [((a + 90) / 180) * ra_width for a in azimuth_ticks]
     axs[1, 1].set_xticks(x_ticks_ra)
-    axs[1, 1].set_xticklabels([f"{tick}°" for tick in azimuth_ticks])
+    axs[1, 1].set_xticklabels([f"{a}°" for a in azimuth_ticks])
     axs[1, 1].set_xlabel("Azimuth Angle (degrees)")
 
-    y_ticks_ra = [(tick / 103) * ra_height for tick in range_ticks]
+    y_ticks_ra = [(r / 103) * ra_height for r in range_ticks]
     axs[1, 1].set_yticks(y_ticks_ra)
-    axs[1, 1].set_yticklabels([f"{tick}m" for tick in range_ticks])
+    axs[1, 1].set_yticklabels([f"{r}m" for r in range_ticks])
     axs[1, 1].set_ylabel("Range (m)")
 
-    # Add radar labels to RD and RA maps
-    for _, row in labels.iterrows():
-        # Convert radar measurements to pixel coordinates
-        # For Range-Doppler Map
-        rd_height, rd_width = rd_map.shape[:2]
-        range_rd = row['radar_R_m']
-        doppler = row['radar_D_mps']
+    # Annotate radar points
+    for _, row in labels_df.iterrows():
+        x_rd, y_rd = convert_rd_coords(row['radar_R_m'], row['radar_D_mps'], rd_map.shape)
+        annotate_radar_point(axs[1, 0], x_rd, y_rd)
 
-        # Calculate RD y-coordinate (range)
-        y_rd = int((range_rd / 103) * rd_height)
-        y_rd = np.clip(y_rd, 0, rd_height - 1)
-
-        # Calculate RD x-coordinate (Doppler, assuming centered at 0)
-        doppler_bins = doppler / 0.1  # Each bin = 0.1 m/s
-        x_rd = (rd_width // 2) + int(doppler_bins)
-        x_rd = np.clip(x_rd, 0, rd_width - 1)
-
-        axs[1, 0].scatter(x_rd, y_rd, s=50, color='red', marker='o', alpha=0.7)
-
-        # For Range-Azimuth Map
-        ra_height, ra_width = ra.shape[:2]
-        azimuth = row['radar_A_deg']
-        range_ra = row['radar_R_m']
-
-        # Calculate RA x-coordinate (azimuth)
-        x_ra = int(((azimuth + 90) / 180) * ra_width)
-        x_ra = np.clip(x_ra, 0, ra_width - 1)
-
-        # Calculate RA y-coordinate (range)
-        y_ra = int((range_ra / 103) * ra_height)
-        y_ra = np.clip(y_ra, 0, ra_height - 1)
-
-        axs[1, 1].scatter(x_ra, y_ra, s=50, color='red', marker='o', alpha=0.7)
+        x_ra, y_ra = convert_ra_coords(row['radar_R_m'], row['radar_A_deg'], ra_map.shape)
+        annotate_radar_point(axs[1, 1], x_ra, y_ra)
 
     plt.tight_layout()
     return fig
 
 
+# --- Main Pipeline ---
 def main(labels_csv, image_dir, rd_dir, ra_dir, output_dir):
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     labels_df = pd.read_csv(labels_csv, sep='\t|,', engine='python')
-
-    dataset = labels_df['dataset'].unique()
-
+    dataset_names = labels_df['dataset'].unique()
     dataset_path = Path(image_dir).parent
-    if not os.path.isdir(dataset_path):
-        print(f"Skipping {dataset}, directory not found.")
 
-    sample_ids = labels_df[labels_df['dataset'].isin(dataset)]['numSample'].unique()
-    for sample_id in sample_ids:
+    if not dataset_path.exists():
+        print(f"Skipping datasets: directory {dataset_path} not found.")
+        return
 
-        labels = labels_df[(labels_df['dataset'].isin(dataset)) & (labels_df['numSample'] == sample_id)]
+    for sample_id in labels_df['numSample'].unique():
+        sample_labels = labels_df[labels_df['numSample'] == sample_id]
 
-        image_filename = f"image_{sample_id:06d}.jpg"
-        image_path = os.path.join(image_dir, image_filename)
-        if not os.path.exists(image_path):
-            print(f"Image not found: {image_path}")
+        image_path = Path(image_dir) / f"image_{sample_id:06d}.jpg"
+        rd_path = Path(rd_dir) / f"rd_{sample_id:06d}.npy"
+        ra_path = Path(ra_dir) / f"ra_{sample_id:06d}.npy"
+
+        if not (image_path.exists() and rd_path.exists() and ra_path.exists()):
+            print(f"Missing files for sample {sample_id}. Skipping.")
             continue
 
-        rd_filename = f"rd_{sample_id:06d}.npy"
-        rd_path = os.path.join(rd_dir, rd_filename)
-        if not os.path.exists(image_path):
-            print(f"Image not found: {image_path}")
-            continue
-
-        ra_filename = f"ra_{sample_id:06d}.npy"
-        ra_path = os.path.join(ra_dir, ra_filename)
-        if not os.path.exists(image_path):
-            print(f"Image not found: {image_path}")
-            continue
-
-
-
-        fig = generate_figure(rd_path, ra_path, labels, image_path)
-        output_path = os.path.join(output_dir, f"viz_{sample_id:06d}.png")
+        fig = generate_figure(rd_path, ra_path, sample_labels, image_path)
+        output_path = output_dir / f"viz_{sample_id:06d}.png"
         fig.savefig(output_path)
         plt.close(fig)
         print(f"Saved visualization to {output_path}")
