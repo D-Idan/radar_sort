@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from pathlib import Path
-
+from utils.T_FFTRadNet.RadIal.utils.util import worldToImage
 
 class RadarVisualizationTool:
     def __init__(self, camera_params=None):
@@ -85,10 +85,10 @@ class RadarVisualizationTool:
 
     def _annotate_camera_image(self, image, labels_df, predictions_df):
         """Add bounding boxes to camera image"""
-        scale_w, scale_h = self.get_scale_factor(image)
 
-        # Ground truth (green)
+        # Ground truth (green) - with scaling
         for _, row in labels_df.iterrows():
+            scale_w, scale_h = self.get_scale_factor(image)
             bbox = (
                 row['x1_pix'] * scale_w,
                 row['y1_pix'] * scale_h,
@@ -98,11 +98,25 @@ class RadarVisualizationTool:
             label = f"GT R:{row['radar_R_m']:.1f} A:{row['radar_A_deg']:.1f}"
             image = self.draw_bounding_box(image, bbox, label, color=(0, 255, 0))
 
-        # Predictions (red)
+        # Predictions (red) - convert from world to image coordinates
         for _, row in predictions_df.iterrows():
-            bbox = (row['x1'], row['y1'], row['x3'], row['y3'])  # Use opposite corners
-            label = f"P R:{row['range_m']:.1f} A:{row['azimuth_deg']:.1f} C:{row['confidence']:.2f}"
-            image = self.draw_bounding_box(image, bbox, label, color=(255, 0, 0))
+            # Convert range/azimuth to cartesian
+            range_m = row['range_m']
+            azimuth_deg = row['azimuth_deg']
+            x = np.sin(np.deg2rad(azimuth_deg)) * range_m
+            y = np.cos(np.deg2rad(azimuth_deg)) * range_m
+
+            # Project to image coordinates using your worldToImage function
+            u1, v1 = worldToImage(-x - 0.9, y, 0)  # Front-left corner
+            u2, v2 = worldToImage(-x + 0.9, y, 1.6)  # Back-right corner
+
+            # Scale coordinates (divide by 2 as in your working example)
+            u1, v1 = int(u1 / 2), int(v1 / 2)
+            u2, v2 = int(u2 / 2), int(v2 / 2)
+
+            bbox = (u1, v1, u2, v2)
+            label = f"P R:{range_m:.1f} A:{azimuth_deg:.1f} C:{row['confidence']:.2f}"
+            image = self.draw_bounding_box(image, bbox, label, color=(255, 0, 0), thickness=3)
 
         return image
 
