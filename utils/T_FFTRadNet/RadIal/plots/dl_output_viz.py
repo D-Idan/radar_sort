@@ -85,16 +85,19 @@ def process_detection_outputs(model_outputs, encoder, confidence_threshold=0.2):
         return np.array([])
 
 # 2. Visualization on Camera Images (Cartesian Coordinates)
-def visualize_detections_on_image(image, model_outputs, encoder):
+def visualize_detections_on_image(image, model_outputs, encoder=None):
     """Draw detection bounding boxes on camera image"""
-    # Process detections
-    pred_obj = model_outputs['Detection'].detach().cpu().numpy().copy()[0]
-    pred_obj = encoder.decode(pred_obj, 0.05)
-    pred_obj = np.asarray(pred_obj)
+    if encoder:
+        # Process detections
+        pred_obj = model_outputs['Detection'].detach().cpu().numpy().copy()[0]
+        pred_obj = encoder.decode(pred_obj, 0.05)
+        pred_obj = np.asarray(pred_obj)
 
+        if len(pred_obj) > 0:
+            pred_obj = process_predictions_FFT(pred_obj, confidence_threshold=0.2)
+    else:
+        pred_obj = np.asarray(model_outputs)
     if len(pred_obj) > 0:
-        pred_obj = process_predictions_FFT(pred_obj, confidence_threshold=0.2)
-
         # Draw bounding boxes on image
         for box in pred_obj:
             box = box[1:]  # [score, x1, y1, x2, y2, x3, y3, x4, y4, range, azimuth]
