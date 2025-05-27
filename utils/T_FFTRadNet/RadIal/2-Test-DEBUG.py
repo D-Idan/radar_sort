@@ -1,6 +1,8 @@
 import os
 import json
 import argparse
+from pathlib import Path
+
 import torch
 import numpy as np
 from tqdm import tqdm
@@ -126,6 +128,10 @@ if __name__=='__main__':
 
     # path_model_default = '/mnt/data/datasets/radial/gd/models/RADIal_SwinTransformer_ADC.pth'
     path_model_default = '/Volumes/ELEMENTS/datasets/Trained_Models/RADIal_SwinTransformer_ADC.pth'
+
+    path_model_default = Path('/Volumes/ELEMENTS/datasets/Trained_Models/RADIal_SwinTransformer_ADC.pth')
+    if not path_model_default.exists():
+        path_model_default = Path('/mnt/data/datasets/radial/gd/models/RADIal_SwinTransformer_ADC.pth')
 
     # PARSE THE ARGS
     parser = argparse.ArgumentParser(description='FFTRadNet test')
