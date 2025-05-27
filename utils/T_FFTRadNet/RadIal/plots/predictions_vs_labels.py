@@ -1,10 +1,11 @@
-# visualize_predictions_labels.py
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from pathlib import Path
 from utils.T_FFTRadNet.RadIal.utils.util import worldToImage
+
+from dl_output_viz import visualize_detections_on_bev
 
 class RadarVisualizationTool:
     def __init__(self, camera_params=None):
@@ -64,8 +65,13 @@ class RadarVisualizationTool:
         )
 
         axs[0, 0].imshow(image_viz)
-        axs[0, 0].set_title(f"Sample {sample_id}: Green=GT, Red=Predictions")
+        axs[0, 0].set_title(f"Sample {sample_id}: Green=GT, Red=Net Output")
         axs[0, 0].axis('off')
+
+        # BEV - Bird Eye View
+        bev_img = visualize_detections_on_bev(ra_map, sample_predictions.drop(columns=["detection_id", "sample_id"]).to_numpy())
+        axs[0, 1].imshow(bev_img)
+        axs[0, 1].set_title(f"Bird Eye View: Net Output")
 
         # Range-Doppler map
         axs[1, 0].imshow(rd_map, aspect='auto', origin='lower')
@@ -76,7 +82,7 @@ class RadarVisualizationTool:
         # Range-Azimuth map with points
         axs[1, 1].imshow(ra_map, aspect='auto', origin='lower')
         axs[1, 1].invert_xaxis()
-        axs[1, 1].set_title("Range-Azimuth: Green=GT, Red=Predictions")
+        axs[1, 1].set_title("Range-Azimuth: Green=GT, Red=Net Output")
         self._setup_ra_axes(axs[1, 1], ra_map.shape)
         self._annotate_ra_map(axs[1, 1], sample_labels, sample_predictions, ra_map.shape)
 
