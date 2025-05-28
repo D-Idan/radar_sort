@@ -323,14 +323,14 @@ def visualize_detections_on_bev(ra_map, model_outputs, encoder=None, max_range=1
         cv2.circle(bev, (px, py), 6, (255, 0, 0), -1)
 
         # # 5b. draw oriented bbox
-        corners = np.array(det['bbox']).reshape(4, 2)  # [[x1,y1],...]
-        pts = []
-        for cx, cy in corners:
-            px_i = int(center_x - cx * scale)
-            py_i = int(h - cy * scale)
-            pts.append([px_i, py_i])
-        pts = np.array(pts, dtype=np.int32)
-        cv2.polylines(bev, [pts], isClosed=True, color=(200, 200, 200), thickness=2)
+        # corners = np.array(det['bbox']).reshape(4, 2)  # [[x1,y1],...]
+        # pts = []
+        # for cx, cy in corners:
+        #     px_i = int(center_x - cx * scale)
+        #     py_i = int(h - cy * scale)
+        #     pts.append([px_i, py_i])
+        # pts = np.array(pts, dtype=np.int32)
+        # cv2.polylines(bev, [pts], isClosed=True, color=(200, 200, 200), thickness=2)
 
     return cv2.resize(bev,dsize=(751, 512))
 
