@@ -270,33 +270,41 @@ def visualize_detections_on_bev(ra_map, model_outputs, encoder=None, max_range=1
     Returns:
       - bev_bgr: uint8 BGR image with plotted boxes & points
     """
+    print(ra_map.shape)
     # 1. Normalize & make BGR
     if ra_map.dtype != np.uint8:
         ra_norm = ((ra_map - ra_map.min()) /
                    (ra_map.max() - ra_map.min()) * 255).astype(np.uint8)
     else:
         ra_norm = ra_map.copy()
-    if ra_norm.ndim == 2:
-        ra_bgr = cv2.cvtColor(ra_norm, cv2.COLOR_GRAY2BGR)
-    else:
-        ra_bgr = ra_norm.copy()
+    # if ra_norm.ndim == 2:
+    #     ra_norm = cv2.cvtColor(ra_norm, cv2.COLOR_GRAY2BGR)
+    # else:
+    #     ra_norm = ra_norm.copy()
 
     # 2. Polar→Cartesian (BEV)
     #    note: we assume ra_norm is shape [range_bins, az_bins]
     #    convertToCartesianImage expects [H, W] or [H, W, C]
+    #      initialAngle = -π/2, finalAngle = +π/2
+    #    And give finalRadius = number of range‐bins (pixels), not meters:
+    #    because convertToCartesianImage expects width=angle, height=radius
+    ra_for_polar = ra_norm.T
+    num_range_bins, num_az_bins = ra_norm.shape
     RA_cartesian, _ = polarTransform.convertToCartesianImage(
-        ra_norm, useMultiThreading=True,
-        initialAngle=0, finalAngle=np.pi,
-        order=0, hasColor=False
+        ra_for_polar,
+        useMultiThreading=True,
+        initialAngle=-np.pi/2,
+        finalAngle=+np.pi/2,
+        order=1,
+        hasColor=False,
+        finalRadius=num_range_bins
     )
 
     # Make a crop on the angle axis
-    RA_cartesian = RA_cartesian[:,256-100:256+100]
-
-    RA_cartesian = np.asarray((RA_cartesian*255).astype('uint8'))
-    RA_cartesian = cv2.applyColorMap(RA_cartesian, cv2.COLORMAP_VIRIDIS)
-    RA_cartesian = cv2.resize(RA_cartesian,dsize=(400,512))
-    bev=cv2.flip(RA_cartesian,flipCode=-1)
+    # RA_cartesian = RA_cartesian[:, 256 - 100:256 + 100]
+    bev = cv2.flip(RA_cartesian, flipCode=0)  # Around the Y axis
+    bev = cv2.rotate(bev, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    bev = cv2.resize(bev, dsize=(400, 512))
 
     # 3. Prepare scaling from meters→pixels
     h, w = bev.shape[:2]
@@ -310,21 +318,21 @@ def visualize_detections_on_bev(ra_map, model_outputs, encoder=None, max_range=1
     for det in dets:
         x, y = det['x'], det['y']  # meters
         # 5a. draw centroid
-        px = int(center_x + x * scale)
+        px = int(center_x - x * scale)
         py = int(h - y * scale)
-        cv2.circle(bev, (px, py), 4, (0, 0, 255), -1)
+        cv2.circle(bev, (px, py), 6, (255, 0, 0), -1)
 
-        # 5b. draw oriented bbox
+        # # 5b. draw oriented bbox
         corners = np.array(det['bbox']).reshape(4, 2)  # [[x1,y1],...]
         pts = []
         for cx, cy in corners:
-            px_i = int(center_x + cx * scale)
+            px_i = int(center_x - cx * scale)
             py_i = int(h - cy * scale)
             pts.append([px_i, py_i])
         pts = np.array(pts, dtype=np.int32)
-        cv2.polylines(bev, [pts], isClosed=True, color=(255, 0, 0), thickness=2)
+        cv2.polylines(bev, [pts], isClosed=True, color=(200, 200, 200), thickness=2)
 
-    return bev
+    return cv2.resize(bev,dsize=(751, 512))
 
 
 # Example usage:

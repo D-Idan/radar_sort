@@ -69,9 +69,11 @@ class RadarVisualizationTool:
         axs[0, 0].axis('off')
 
         # BEV - Bird Eye View
-        bev_img = visualize_detections_on_bev(ra_map, sample_predictions.drop(columns=["detection_id", "sample_id"]).to_numpy())
+        used_cols = ['confidence', 'x1', 'y1', 'x2', 'y2', 'x3', 'y3', 'x4', 'y4', 'range_m', 'azimuth_deg']
+        bev_img = visualize_detections_on_bev(ra_map, sample_predictions[used_cols].to_numpy())
         axs[0, 1].imshow(bev_img)
-        axs[0, 1].set_title(f"Bird Eye View: Net Output")
+        axs[0, 1].set_title(f"Pill View: Net Output")
+        axs[0, 1].axis('off')
 
         # Range-Doppler map
         axs[1, 0].imshow(rd_map, aspect='auto', origin='lower')
