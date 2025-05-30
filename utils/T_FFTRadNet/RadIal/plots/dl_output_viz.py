@@ -270,7 +270,6 @@ def visualize_detections_on_bev(ra_map, model_outputs, encoder=None, max_range=1
     Returns:
       - bev_bgr: uint8 BGR image with plotted boxes & points
     """
-    print(ra_map.shape)
     # 1. Normalize & make BGR
     if ra_map.dtype != np.uint8:
         ra_norm = ((ra_map - ra_map.min()) /
