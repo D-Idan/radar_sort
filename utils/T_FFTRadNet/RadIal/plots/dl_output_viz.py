@@ -10,7 +10,14 @@ from shapely.geometry import Polygon
 from shapely.ops import unary_union
 import polarTransform
 
-from utils.util import process_predictions_FFT, worldToImage
+try:
+    from utils.T_FFTRadNet.RadIal.utils.util import process_predictions_FFT, worldToImage
+except:
+    None
+try:
+    from utils.util import process_predictions_FFT, worldToImage
+except:
+    None
 
 # --- Camera & Model Parameters ---
 CAMERA_MATRIX = np.array([[1.84541929e+03, 0.0, 8.55802458e+02],
@@ -149,16 +156,24 @@ def extract_polar_coordinates(model_outputs, encoder):
 
 
 # 4. Extract Cartesian Coordinates
-def extract_cartesian_coordinates(model_outputs, encoder):
+def extract_cartesian_coordinates(model_outputs, encoder=None):
     """Extract detections in cartesian coordinates (X, Y)"""
-    pred_obj = model_outputs['Detection'].detach().cpu().numpy().copy()[0]
-    pred_obj = encoder.decode(pred_obj, 0.05)
-    pred_obj = np.asarray(pred_obj)
-
     cartesian_detections = []
 
-    if len(pred_obj) > 0:
-        processed_obj = process_predictions_FFT(pred_obj, confidence_threshold=0.2)
+    if encoder:
+        pred_obj = model_outputs['Detection'].detach().cpu().numpy().copy()[0]
+        pred_obj = encoder.decode(pred_obj, 0.05)
+        pred_obj = np.asarray(pred_obj)
+
+        processed_obj = None
+
+        if len(pred_obj) > 0:
+            processed_obj = process_predictions_FFT(pred_obj, confidence_threshold=0.2)
+
+    else:
+        processed_obj = model_outputs
+
+    if len(processed_obj) > 0:
 
         for detection in processed_obj:
             confidence = detection[0]
@@ -240,6 +255,84 @@ def draw_boxes_on_RA_map(res):
     # Or save to file
     cv2.imwrite('ra_detections.png', res)
 
+
+def visualize_detections_on_bev(ra_map, model_outputs, encoder=None, max_range=103.0):
+    """
+    Converts a Range–Azimuth map to a BEV image and overlays:
+      • detection centroids as red dots
+      • detection bounding boxes in blue
+
+    Inputs:
+      - ra_map: 2D numpy array (range × azimuth) float or uint8
+      - model_outputs, encoder: same as for your other vis funcs
+      - max_range: maximum radar range in meters (default 103 m)
+
+    Returns:
+      - bev_bgr: uint8 BGR image with plotted boxes & points
+    """
+    print(ra_map.shape)
+    # 1. Normalize & make BGR
+    if ra_map.dtype != np.uint8:
+        ra_norm = ((ra_map - ra_map.min()) /
+                   (ra_map.max() - ra_map.min()) * 255).astype(np.uint8)
+    else:
+        ra_norm = ra_map.copy()
+    # if ra_norm.ndim == 2:
+    #     ra_norm = cv2.cvtColor(ra_norm, cv2.COLOR_GRAY2BGR)
+    # else:
+    #     ra_norm = ra_norm.copy()
+
+    # 2. Polar→Cartesian (BEV)
+    #    note: we assume ra_norm is shape [range_bins, az_bins]
+    #    convertToCartesianImage expects [H, W] or [H, W, C]
+    #      initialAngle = -π/2, finalAngle = +π/2
+    #    And give finalRadius = number of range‐bins (pixels), not meters:
+    #    because convertToCartesianImage expects width=angle, height=radius
+    ra_for_polar = ra_norm.T
+    num_range_bins, num_az_bins = ra_norm.shape
+    RA_cartesian, _ = polarTransform.convertToCartesianImage(
+        ra_for_polar,
+        useMultiThreading=True,
+        initialAngle=-np.pi/2,
+        finalAngle=+np.pi/2,
+        order=1,
+        hasColor=False,
+        finalRadius=num_range_bins
+    )
+
+    # Make a crop on the angle axis
+    # RA_cartesian = RA_cartesian[:, 256 - 100:256 + 100]
+    bev = cv2.flip(RA_cartesian, flipCode=0)  # Around the Y axis
+    bev = cv2.rotate(bev, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    bev = cv2.resize(bev, dsize=(400, 512))
+
+    # 3. Prepare scaling from meters→pixels
+    h, w = bev.shape[:2]
+    scale = h / max_range  # pixels per meter
+    center_x = w // 2  # x=0 m maps to center column
+
+    # 4. Get Cartesian detections
+    dets = extract_cartesian_coordinates(model_outputs, encoder)
+
+    # 5. Overlay each detection
+    for det in dets:
+        x, y = det['x'], det['y']  # meters
+        # 5a. draw centroid
+        px = int(center_x - x * scale)
+        py = int(h - y * scale)
+        cv2.circle(bev, (px, py), 6, (255, 0, 0), -1)
+
+        # # 5b. draw oriented bbox
+        # corners = np.array(det['bbox']).reshape(4, 2)  # [[x1,y1],...]
+        # pts = []
+        # for cx, cy in corners:
+        #     px_i = int(center_x - cx * scale)
+        #     py_i = int(h - cy * scale)
+        #     pts.append([px_i, py_i])
+        # pts = np.array(pts, dtype=np.int32)
+        # cv2.polylines(bev, [pts], isClosed=True, color=(200, 200, 200), thickness=2)
+
+    return cv2.resize(bev,dsize=(751, 512))
 
 
 # Example usage:

@@ -1,10 +1,11 @@
-# visualize_predictions_labels.py
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from pathlib import Path
 from utils.T_FFTRadNet.RadIal.utils.util import worldToImage
+
+from dl_output_viz import visualize_detections_on_bev
 
 class RadarVisualizationTool:
     def __init__(self, camera_params=None):
@@ -64,8 +65,15 @@ class RadarVisualizationTool:
         )
 
         axs[0, 0].imshow(image_viz)
-        axs[0, 0].set_title(f"Sample {sample_id}: Green=GT, Red=Predictions")
+        axs[0, 0].set_title(f"Sample {sample_id}: Green=GT, Red=Net Output")
         axs[0, 0].axis('off')
+
+        # BEV - Bird Eye View
+        used_cols = ['confidence', 'x1', 'y1', 'x2', 'y2', 'x3', 'y3', 'x4', 'y4', 'range_m', 'azimuth_deg']
+        bev_img = visualize_detections_on_bev(ra_map, sample_predictions[used_cols].to_numpy())
+        axs[0, 1].imshow(bev_img)
+        axs[0, 1].set_title(f"BEV (Bird Eye View): Net Output")
+        self._setup_bev_axes(axs[0, 1], bev_img.shape, max_range=103.0, n_ticks=5)
 
         # Range-Doppler map
         axs[1, 0].imshow(rd_map, aspect='auto', origin='lower')
@@ -76,7 +84,7 @@ class RadarVisualizationTool:
         # Range-Azimuth map with points
         axs[1, 1].imshow(ra_map, aspect='auto', origin='lower')
         axs[1, 1].invert_xaxis()
-        axs[1, 1].set_title("Range-Azimuth: Green=GT, Red=Predictions")
+        axs[1, 1].set_title("Range-Azimuth: Green=GT, Red=Net Output")
         self._setup_ra_axes(axs[1, 1], ra_map.shape)
         self._annotate_ra_map(axs[1, 1], sample_labels, sample_predictions, ra_map.shape)
 
@@ -161,6 +169,37 @@ class RadarVisualizationTool:
         ax.set_yticks(y_ticks)
         ax.set_yticklabels([f"{r}m" for r in range_ticks])
         ax.set_ylabel("Range (m)")
+
+    def _setup_bev_axes(self, ax, shape, max_range=103.0, n_ticks=5):
+        """
+        Setup Bird’s-Eye-View axes for a Cartesian radar BEV image.
+
+        Parameters
+        ----------
+        ax : matplotlib Axes
+        shape : tuple[int,int]
+            (height, width) of the BEV image in pixels
+        max_range : float
+            maximum range (meters) that the BEV spans in the y-direction
+        n_ticks : int
+            how many ticks to put on each axis
+        """
+        height, width = shape
+
+        # X axis: meters from -max_range → +max_range, zero at center
+        x_m = np.array([-100, -60, -30, 0, 30, 60, 100])
+        # map meter values to pixel positions 0→w
+        x_pix = (x_m + max_range) / (2 * max_range) * width
+        ax.set_xticks(x_pix)
+        ax.set_xticklabels([f"{xm:.0f}" for xm in x_m])
+        ax.set_xlabel("Lateral (X) [m]")
+
+        range_ticks = [0, 20, 40, 60, 80, 100]
+        y_ticks = [(r / 103) * height for r in range_ticks]
+        ax.set_yticks(y_ticks)
+        ax.set_yticklabels([f"{r}" for r in reversed(range_ticks)])
+        ax.set_ylabel("Forward (Y) (m)")
+
 
 
 def main(labels_csv, predictions_csv, image_dir, rd_dir, ra_dir, output_dir):
