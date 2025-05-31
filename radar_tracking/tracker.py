@@ -1,0 +1,202 @@
+"""
+Main tracking logic implementing SORT-like algorithm for radar objects.
+"""
+import numpy as np
+from typing import List, Dict, Tuple, Optional
+from .data_structures import Detection, Track
+from .kalman_filter import RadarKalmanFilter
+from .metrics import RadarMetrics
+from .coordinate_transforms import euclidean_distance
+from scipy.optimize import linear_sum_assignment
+
+
+class RadarTracker:
+    """
+    SORT-like tracker for radar objects using Kalman filtering and Hungarian assignment.
+    """
+
+    def __init__(self,
+                 max_age: int = 5,
+                 min_hits: int = 3,
+                 iou_threshold: float = 5.0,  # Distance threshold in meters
+                 dt: float = 1.0):
+        """
+        Initialize radar tracker.
+
+        Args:
+            max_age: Maximum frames to keep track alive without detections
+            min_hits: Minimum detections before track is considered confirmed
+            iou_threshold: Maximum distance for association (meters)
+            dt: Time step between frames (seconds)
+        """
+        self.max_age = max_age
+        self.min_hits = min_hits
+        self.iou_threshold = iou_threshold
+        self.dt = dt
+
+        # Initialize components
+        self.kf = RadarKalmanFilter(dt=dt)
+        self.metrics = RadarMetrics(max_distance_threshold=iou_threshold)
+
+        # Tracking state
+        self.tracks: List[Track] = []
+        self.next_id = 1
+        self.frame_count = 0
+
+    def update(self, detections: List[Detection]) -> List[Track]:
+        """
+        Update tracker with new detections.
+
+        Args:
+            detections: List of detections for current frame
+
+        Returns:
+            List of active tracks
+        """
+        self.frame_count += 1
+
+        # Predict all existing tracks
+        self._predict_tracks()
+
+        # Associate detections with tracks
+        matches, unmatched_detections, unmatched_tracks = self._associate(detections)
+
+        # Update matched tracks
+        for track_idx, det_idx in matches:
+            self.tracks[track_idx] = self._update_track(
+                self.tracks[track_idx], detections[det_idx]
+            )
+
+        # Handle unmatched tracks
+        for track_idx in unmatched_tracks:
+            self.tracks[track_idx].time_since_update += 1
+            self.tracks[track_idx].age += 1
+
+        # Create new tracks from unmatched detections
+        for det_idx in unmatched_detections:
+            self._initiate_track(detections[det_idx])
+
+        # Remove dead tracks
+        self._remove_dead_tracks()
+
+        # Return confirmed tracks
+        return self._get_confirmed_tracks()
+
+    def _predict_tracks(self):
+        """Predict all existing tracks to current frame."""
+        for track in self.tracks:
+            track.state, track.covariance = self.kf.predict(track.state, track.covariance)
+            track.age += 1
+
+    def _associate(self, detections: List[Detection]) -> Tuple[List[Tuple[int, int]],
+    List[int],
+    List[int]]:
+        """
+        Associate detections with existing tracks using Hungarian algorithm.
+
+        Args:
+            detections: List of detections to associate
+
+        Returns:
+            Tuple of (matches, unmatched_detections, unmatched_tracks)
+        """
+        if not self.tracks or not detections:
+            return [], list(range(len(detections))), list(range(len(self.tracks)))
+
+        # Create cost matrix
+        cost_matrix = np.zeros((len(self.tracks), len(detections)))
+
+        for t, track in enumerate(self.tracks):
+            for d, detection in enumerate(detections):
+                # Calculate distance between track prediction and detection
+                track_pos = (track.state[0], track.state[1])
+                det_pos = detection.cartesian_pos
+                distance = euclidean_distance(track_pos, det_pos)
+
+                # Use gating distance if available
+                try:
+                    mahal_dist = self.kf.gating_distance(
+                        track.state, track.covariance, det_pos
+                    )
+                    # Combine Euclidean and Mahalanobis distances
+                    cost_matrix[t, d] = distance + 0.1 * mahal_dist
+                except:
+                    cost_matrix[t, d] = distance
+
+        # Apply Hungarian algorithm
+        if cost_matrix.size > 0:
+            track_indices, det_indices = linear_sum_assignment(cost_matrix)
+
+            # Filter matches by distance threshold
+            matches = []
+            for t_idx, d_idx in zip(track_indices, det_indices):
+                if cost_matrix[t_idx, d_idx] <= self.iou_threshold:
+                    matches.append((t_idx, d_idx))
+
+            # Find unmatched tracks and detections
+            matched_tracks = {t_idx for t_idx, _ in matches}
+            matched_detections = {d_idx for _, d_idx in matches}
+
+            unmatched_tracks = [t for t in range(len(self.tracks))
+                                if t not in matched_tracks]
+            unmatched_detections = [d for d in range(len(detections))
+                                    if d not in matched_detections]
+        else:
+            matches = []
+            unmatched_tracks = list(range(len(self.tracks)))
+            unmatched_detections = list(range(len(detections)))
+
+        return matches, unmatched_detections, unmatched_tracks
+
+    def _update_track(self, track: Track, detection: Detection) -> Track:
+        """Update track with associated detection."""
+        # Update Kalman filter
+        track.state, track.covariance = self.kf.update(
+            track.state, track.covariance, detection.cartesian_pos
+        )
+
+        # Update track metadata
+        track.last_detection = detection
+        track.hits += 1
+        track.time_since_update = 0
+        track.confidence = detection.confidence
+
+        return track
+
+    def _initiate_track(self, detection: Detection):
+        """Create new track from unmatched detection."""
+        state, covariance = self.kf.initiate(detection.cartesian_pos)
+
+        new_track = Track(
+            id=self.next_id,
+            state=state,
+            covariance=covariance,
+            last_detection=detection,
+            age=1,
+            hits=1,
+            time_since_update=0,
+            confidence=detection.confidence
+        )
+
+        self.tracks.append(new_track)
+        self.next_id += 1
+
+    def _remove_dead_tracks(self):
+        """Remove tracks that have been inactive for too long."""
+        self.tracks = [track for track in self.tracks
+                       if track.time_since_update < self.max_age]
+
+    def _get_confirmed_tracks(self) -> List[Track]:
+        """Get tracks that have enough hits to be considered confirmed."""
+        return [track for track in self.tracks
+                if track.hits >= self.min_hits or track.time_since_update == 0]
+
+    def get_all_tracks(self) -> List[Track]:
+        """Get all active tracks (confirmed and tentative)."""
+        return self.tracks.copy()
+
+    def reset(self):
+        """Reset tracker state."""
+        self.tracks = []
+        self.next_id = 1
+        self.frame_count = 0
