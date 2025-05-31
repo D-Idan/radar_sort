@@ -27,7 +27,7 @@ class Detection:
     def __post_init__(self):
         """Convert to Cartesian coordinates after initialization."""
         if self.cartesian_pos is None:
-            from .coordinate_transforms import polar_to_cartesian
+            from coordinate_transforms import polar_to_cartesian
             self.cartesian_pos = polar_to_cartesian(self.range_m, self.azimuth_rad)
 
 

@@ -5,10 +5,10 @@ Demonstrates how to use all components together.
 import numpy as np
 from typing import List
 import matplotlib.pyplot as plt
-from .data_structures import Detection, Track
-from .tracklet_manager import TrackletManager
-from .metrics import RadarMetrics
-from .coordinate_transforms import polar_to_cartesian
+from data_structures import Detection, Track
+from tracklet_manager import TrackletManager
+from metrics import RadarMetrics
+from coordinate_transforms import polar_to_cartesian
 
 
 def generate_synthetic_radar_data(num_frames: int = 50,
@@ -58,7 +58,7 @@ def generate_synthetic_radar_data(num_frames: int = 50,
             det_y = true_y + noise_y
 
             # Convert to polar coordinates
-            from .coordinate_transforms import cartesian_to_polar
+            from coordinate_transforms import cartesian_to_polar
             det_range, det_azimuth = cartesian_to_polar(det_x, det_y)
             true_range, true_azimuth = cartesian_to_polar(true_x, true_y)
 
@@ -245,7 +245,7 @@ if __name__ == "__main__":
     evaluate_tracking_performance(manager)
 
     # Uncomment to show plot (requires matplotlib)
-    # detections_frames, _ = generate_synthetic_radar_data(num_frames=50, num_objects=4)
-    # plot_tracking_results(manager, detections_frames)
+    detections_frames, _ = generate_synthetic_radar_data(num_frames=50, num_objects=4)
+    plot_tracking_results(manager, detections_frames)
 
     print("\nExample completed successfully!")

@@ -5,9 +5,9 @@ Handles track lifecycle, merging, and long-term tracking statistics.
 from typing import List, Dict, Optional, Set
 from dataclasses import dataclass, field
 import numpy as np
-from .data_structures import Track, Detection, TrackingResult
-from .tracker import RadarTracker
-from .metrics import RadarMetrics
+from data_structures import Track, Detection, TrackingResult
+from radar_tracking.tracker import RadarTracker
+from metrics import RadarMetrics
 
 
 @dataclass
@@ -147,7 +147,7 @@ class TrackletManager:
             # Create detection from track state
             pos = track.position
             # Convert back to polar coordinates for consistency
-            from .coordinate_transforms import cartesian_to_polar
+            from coordinate_transforms import cartesian_to_polar
             range_m, azimuth_rad = cartesian_to_polar(pos[0], pos[1])
 
             detection = Detection(

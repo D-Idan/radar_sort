@@ -5,8 +5,8 @@ Uses Hungarian algorithm for optimal assignment between predictions and ground t
 import numpy as np
 from typing import List, Tuple, Optional
 from scipy.optimize import linear_sum_assignment
-from .data_structures import Detection, TrackingResult
-from .coordinate_transforms import euclidean_distance
+from data_structures import Detection, TrackingResult
+from coordinate_transforms import euclidean_distance
 
 
 class RadarMetrics:

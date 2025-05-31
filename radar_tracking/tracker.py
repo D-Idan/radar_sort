@@ -3,10 +3,10 @@ Main tracking logic implementing SORT-like algorithm for radar objects.
 """
 import numpy as np
 from typing import List, Dict, Tuple, Optional
-from .data_structures import Detection, Track
-from .kalman_filter import RadarKalmanFilter
-from .metrics import RadarMetrics
-from .coordinate_transforms import euclidean_distance
+from data_structures import Detection, Track
+from kalman_filter import RadarKalmanFilter
+from metrics import RadarMetrics
+from coordinate_transforms import euclidean_distance
 from scipy.optimize import linear_sum_assignment
 
 
