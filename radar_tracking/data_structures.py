@@ -17,17 +17,19 @@ class Detection:
         confidence: Detection confidence score (0.0 to 1.0)
         timestamp: Detection timestamp
         cartesian_pos: Converted Cartesian position (x, y)
+        bbox_corners: Optional bounding box corners in Cartesian coordinates RA map
     """
     range_m: float
     azimuth_rad: float
     confidence: float
     timestamp: float
     cartesian_pos: Optional[Tuple[float, float]] = None
+    bbox_corners: Optional[dict] = None
 
     def __post_init__(self):
         """Convert to Cartesian coordinates after initialization."""
         if self.cartesian_pos is None:
-            from coordinate_transforms import polar_to_cartesian
+            from radar_tracking.coordinate_transforms import polar_to_cartesian
             self.cartesian_pos = polar_to_cartesian(self.range_m, self.azimuth_rad)
 
 
