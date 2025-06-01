@@ -133,7 +133,8 @@ def process_visualization(data, outputs, enc):
             print(f"Visualization warning for frame {data[5] if len(data) > 5 else 'unknown'}: {e}")
 
 
-def main_processing_with_tracking(net, dataset, config, checkpoint_filename, enc, device, viz_jit=False):
+def main_processing_with_tracking(net, dataset, config, checkpoint_filename, enc, device,
+                                  viz_jit=False, debug_lenData=None):
     """
     Main processing function that runs inference with and without tracking
 
@@ -144,6 +145,7 @@ def main_processing_with_tracking(net, dataset, config, checkpoint_filename, enc
         checkpoint_filename: Path to model checkpoint
         enc: Encoder for decoding predictions
         device: Device to run on (cuda/cpu)
+        viz_jit: Whether to enable in time visualization (default: False)
     """
 
     print("=" * 80)
@@ -177,6 +179,12 @@ def main_processing_with_tracking(net, dataset, config, checkpoint_filename, enc
     failed_frames = 0
 
     print(f"\nStarting processing...")
+
+    # If debug_lenData is set, limit the dataset iterator
+    if debug_lenData is not None:
+        dataset_iter = iter(dataset)
+        dataset = [next(dataset_iter) for _ in range(min(debug_lenData, len(dataset)))] \
+            if hasattr(dataset, '__len__') else [x for _, x in zip(range(debug_lenData), dataset)]
 
     for data in tqdm(dataset, desc="Processing samples", unit="sample"):
         try:

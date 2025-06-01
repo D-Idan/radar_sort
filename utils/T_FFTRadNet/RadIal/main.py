@@ -63,7 +63,10 @@ def main(config, checkpoint_filename,difficult):
         config=config,
         checkpoint_filename=checkpoint_filename,
         enc=enc,
-        device=device
+        device=device,
+        viz_jit=False,
+        debug_lenData=50,
+
     )
 
     # Access the results

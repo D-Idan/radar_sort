@@ -1,3 +1,4 @@
+# tracker.py
 """
 Main tracking logic implementing SORT-like algorithm for radar objects.
 """
@@ -149,13 +150,42 @@ class RadarTracker:
         return matches, unmatched_detections, unmatched_tracks
 
     def _update_track(self, track: Track, detection: Detection) -> Track:
-        """Update track with associated detection."""
-        # Update Kalman filter
-        track.state, track.covariance = self.kf.update(
-            track.state, track.covariance, detection.cartesian_pos
-        )
+        """
+        Update track with associated detection.  On the *second* detection for a given track (i.e. when hits == 1),
+        compute an explicit velocity estimate from (x_prev, y_prev) → (x_new, y_new) before calling kf.update().
+        """
 
-        # Update track metadata
+        # If this is the second detection (track.hits == 1 means we previously had exactly 1 hit),
+        # compute a velocity estimate from the previous detection → current detection:
+        if track.hits == 1 and track.last_detection is not None:
+            x_prev, y_prev = track.last_detection.cartesian_pos
+            x_new, y_new = detection.cartesian_pos
+            dt = self.dt
+
+            # Compute “observed” velocity
+            vx = (x_new - x_prev) / dt
+            vy = (y_new - y_prev) / dt
+
+            # First, run the usual KF‐predict (so the KF’s internal state is at time k|k−1).
+            pred_state, pred_covariance = self.kf.predict(track.state, track.covariance)
+
+            # Overwrite only the predicted velocity entries with our “bootstrapped” value:
+            pred_state[2] = vx
+            pred_state[3] = vy
+
+            # Now run the KF‐update with the measured position, but using our modified state as the prior.
+            track.state, track.covariance = self.kf.update(
+                pred_state, pred_covariance, detection.cartesian_pos
+            )
+
+        else:
+            # If not the second detection, use the normal predict→update cycle
+            # (Note: _predict_tracks() already called predict() for every track in update()).
+            track.state, track.covariance = self.kf.update(
+                track.state, track.covariance, detection.cartesian_pos
+            )
+
+        # Finally, update the bookkeeping fields:
         track.last_detection = detection
         track.hits += 1
         track.time_since_update = 0
@@ -187,9 +217,15 @@ class RadarTracker:
                        if track.time_since_update < self.max_age]
 
     def _get_confirmed_tracks(self) -> List[Track]:
-        """Get tracks that have enough hits to be considered confirmed."""
-        return [track for track in self.tracks
-                if track.hits >= self.min_hits or track.time_since_update == 0]
+        """
+        Return only those tracks that have seen at least `min_hits` detections.
+        (No longer automatically including brand-new tracks with time_since_update=0.)
+        """
+        return [
+            track
+            for track in self.tracks
+            if track.hits >= self.min_hits
+        ]
 
     def get_all_tracks(self) -> List[Track]:
         """Get all active tracks (confirmed and tentative)."""

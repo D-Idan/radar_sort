@@ -77,36 +77,36 @@ def extract_tracking_predictions(tracks, frame_id):
 
     for i, track in enumerate(tracks):
         # Get the latest state from the track
-        latest_state = track.get_latest_state()
+        # Extract state directly from track attributes
+        x, y, _, _ = track.state  # [x, y, vx, vy]
 
-        if latest_state is not None:
-            # Convert back to model prediction format
-            azimuth_deg = np.degrees(latest_state.azimuth_rad)
+        # Convert Cartesian to polar coordinates
+        range_m = np.sqrt(x ** 2 + y ** 2)
+        azimuth_rad = np.arctan2(x, y)  # Swap x and y for Y=1, X=0 to be 0 degrees (forward axis)
+        azimuth_deg = np.degrees(azimuth_rad)
 
-            # If we stored bbox_corners in the original detection, use them
-            # Otherwise, we'll need to reconstruct or leave as NaN
-            bbox_corners = getattr(latest_state, 'bbox_corners', None)
+        # Get bounding box from last detection if available
+        bbox_corners = track.last_detection.bbox_corners if track.last_detection else None
 
-            prediction = {
-                'track_id': track.track_id,
-                'detection_id': i,  # For compatibility with original format
-                'confidence': latest_state.confidence,
-                'range_m': latest_state.range_m,
-                'azimuth_deg': azimuth_deg,
-                'track_age': track.age,
-                'hits': track.hits,
-                'track_state': track.state.name if hasattr(track.state, 'name') else str(track.state)
-            }
+        prediction = {
+            'track_id': track.id,  # Fixed attribute name
+            'detection_id': track.id,  # Using track ID as placeholder
+            'confidence': track.confidence,
+            'range_m': range_m,
+            'azimuth_deg': azimuth_deg,
+            'track_age': track.age,
+            'hits': track.hits,
+            'track_state': 'active' if track.time_since_update == 0 else 'coasting'
+        }
 
-            # Add bounding box coordinates if available
-            if bbox_corners:
-                prediction.update(bbox_corners)
-            else:
-                # Fill with NaN if not available
-                for coord in ['x1', 'y1', 'x2', 'y2', 'x3', 'y3', 'x4', 'y4']:
-                    prediction[coord] = np.nan
+        # Add bounding box if available
+        if bbox_corners:
+            prediction.update(bbox_corners)
+        else:
+            for coord in ['x1', 'y1', 'x2', 'y2', 'x3', 'y3', 'x4', 'y4']:
+                prediction[coord] = np.nan
 
-            predictions.append(prediction)
+        predictions.append(prediction)
 
     return pd.DataFrame(predictions)
 

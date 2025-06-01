@@ -1,3 +1,5 @@
+# tracklet_manager.py
+
 """
 Tracklet management for radar tracking system.
 Handles track lifecycle, merging, and long-term tracking statistics.
