@@ -101,15 +101,15 @@ def main(config, checkpoint_filename,difficult):
             if not path_repo.exists():
                 path_repo = Path('/mnt/data/myprojects/PycharmProjects/thesis_repos/radar_sort/utils')
                 dd = "/mnt/data/datasets/radial/gd/raw_data/"
-                record = "RECORD@2020-11-22_12.37.16"
+                record = "RECORD@2020-11-22_12.54.38"
 
             root_folder = Path(dd, 'RadIal_Data', record)
             ra_dir = Path(root_folder, 'radar_RA')
             ra_path = Path(ra_dir) / f"ra_{data[-1]:06d}.npy"
-            ra_map = np.load(ra_path)
-
-            res_ra =  dl_output_viz.visualize_detections_on_bev(ra_map, outputs, enc, max_range=103)
-            dl_output_viz.draw_boxes_on_RA_map(res_ra)
+            # ra_map = np.load(ra_path)
+            #
+            # res_ra =  dl_output_viz.visualize_detections_on_bev(ra_map, outputs, enc, max_range=103)
+            # dl_output_viz.draw_boxes_on_RA_map(res_ra)
             #
             # res_ra = dl_output_viz.visualize_detections_on_ra_map(ra_map, outputs, enc)
             # dl_output_viz.draw_boxes_on_RA_map(res_ra)
