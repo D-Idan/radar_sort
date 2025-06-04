@@ -136,6 +136,8 @@ def visualize_all_frames_3d_overview(
 ):
     """Create 3D visualization with time axis to show motion on moving platform."""
     from mpl_toolkits.mplot3d import Axes3D
+    import matplotlib.cm as cm
+    import matplotlib.colors as mcolors
 
     fig = plt.figure(figsize=(14, 10))
     ax = fig.add_subplot(111, projection='3d')
@@ -143,9 +145,19 @@ def visualize_all_frames_3d_overview(
     # Collect all data points
     gt_times, gt_az, gt_rng = [], [], []
     det_times, det_az, det_rng = [], [], []
-    track_times, track_az, track_rng = [], [], []
-    track_ids = []
 
+    # Create a color map for tracks
+    unique_track_ids = set()
+    for frame_tracks in all_tracks:
+        for track in frame_tracks:
+            unique_track_ids.add(track.id)
+    num_tracks = len(unique_track_ids)
+    color_map = cm.get_cmap('hsv', num_tracks + 1)
+    track_colors = {track_id: mcolors.to_hex(color_map(i))
+                    for i, track_id in enumerate(unique_track_ids)}
+
+    # Store track data by ID
+    track_data = {}
     for frame_idx, frame_id in enumerate(all_frames):
         # Ground truth
         for gt in all_ground_truth[frame_idx]:
@@ -159,27 +171,72 @@ def visualize_all_frames_3d_overview(
             det_az.append(np.degrees(det.azimuth_rad))
             det_rng.append(det.range_m)
 
-        # Tracks (using Kalman state)
+        # Tracks
         for track in all_tracks[frame_idx]:
-            track_times.append(frame_id)
             range_m, azimuth_rad = track.kalman_polar_position
-            track_az.append(np.rad2deg(azimuth_rad))
-            track_rng.append(range_m)
-            track_ids.append(track.id)
+            azimuth_deg = np.degrees(azimuth_rad)
+
+            if track.id not in track_data:
+                track_data[track.id] = {
+                    'times': [],
+                    'azimuths': [],
+                    'ranges': []
+                }
+
+            track_data[track.id]['times'].append(frame_id)
+            track_data[track.id]['azimuths'].append(azimuth_deg)
+            track_data[track.id]['ranges'].append(range_m)
 
     # Plot 3D scatter
-    ax.scatter(gt_times, gt_az, gt_rng, c='green', marker='x', s=30, alpha=0.7, label='Ground Truth')
+    ax.scatter(gt_times, gt_az, gt_rng, c='green', marker='x', s=40, alpha=0.7, label='Ground Truth')
     ax.scatter(det_times, det_az, det_rng, c='blue', s=15, alpha=0.5, label='Detections')
-    if track_times:  # Only plot if we have track data
-        ax.scatter(track_times, track_az, track_rng, marker='^', s=40, alpha=0.7, facecolors='none', edgecolors='red', label='Tracker Estimates')
 
+    # Plot tracks with unique colors and connecting lines
+    for track_id, data in track_data.items():
+        color = track_colors[track_id]
+        ax.plot(
+            data['times'],
+            data['azimuths'],
+            data['ranges'],
+            color=color,
+            marker='',
+            markersize=4,
+            linewidth=1.5,
+            alpha=0.7,
+            label=f'Track {track_id}'
+        )
 
+        # Add track ID labels at start and end points
+        if data['times']:
+            # Start point
+            ax.text(
+                data['times'][0],
+                data['azimuths'][0],
+                data['ranges'][0],
+                f"T{track_id}",
+                color=color,
+                fontsize=8
+            )
+            # End point
+            ax.text(
+                data['times'][-1],
+                data['azimuths'][-1],
+                data['ranges'][-1],
+                f"T{track_id}",
+                color=color,
+                fontsize=8
+            )
 
     ax.set_xlabel('Frame ID (Time)')
     ax.set_ylabel('Azimuth (deg)')
     ax.set_zlabel('Range (m)')
-    ax.set_title('3D Radar Tracking: Space + Time View\nShowing Moving Platform Motion')
-    ax.legend()
+    ax.set_title('3D Radar Tracking: Space + Time View\nTracks Shown with Unique Colors')
+
+    # Create a legend with track colors
+    handles, labels = ax.get_legend_handles_labels()
+    # Only show 1 entry per track ID
+    unique_labels = dict(zip(labels, handles))
+    ax.legend(unique_labels.values(), unique_labels.keys(), loc='best')
 
     plt.tight_layout()
     plt.savefig(path_save, dpi=200, bbox_inches='tight')
