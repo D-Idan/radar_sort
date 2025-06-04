@@ -15,7 +15,7 @@ from radar_tracking.track_viz import (
     visualize_frame_radar_azimuth,
     visualize_tracklet_lifetime_histogram,
     visualize_avg_confidence_over_time,
-    visualize_all_frames_overview,
+    visualize_all_frames_3d_overview,
     visualize_tracking_temporal_evolution
 )
 
@@ -27,7 +27,7 @@ def setup_tracking_system():
     tracker_config = {
         'max_age': 5,  # frames to keep a track alive without new detections
         'min_hits': 3,  # how many hits before we "confirm" a track
-        'iou_threshold': 0.1,  # maximum distance (meters) for associating dets→tracks
+        'iou_threshold': 10.0,  # maximum distance (meters) for associating dets→tracks
         'dt': 0.1  # assumed time step between frames (you can adjust)
     }
     manager = TrackletManager(tracker_config=tracker_config)
@@ -144,16 +144,14 @@ def offline_tracking(
     prepare_viz_directory(viz_dir)
 
     # 4) Loop over frames
+    prev_frame_id = None
+    base_dt = config['dt'] # configured dt from setup_tracking_system
     for frame_id in tqdm(all_frames,
                          total=len(all_frames),
                          desc="Processing Frames",
                          unit="frame",
                          colour="green",
                          dynamic_ncols=True):
-    prev_frame_id = None
-    base_dt = config['dt'] # configured dt from setup_tracking_system
-
-    for frame_id in all_frames:
 
         # Calculate dynamic dt
         if prev_frame_id is not None:
@@ -264,12 +262,12 @@ def offline_tracking(
     )
 
     # d) NEW: Comprehensive overview showing all frames data
-    visualize_all_frames_overview(
+    visualize_all_frames_3d_overview(
         all_detections=all_detections,
         all_ground_truth=all_ground_truth,
         all_tracks=all_tracks,
         all_frames=all_frames,
-        path_save="all_frames_overview.png"
+        path_save="3d_tracking_overview.png"
     )
 
     # e) NEW: Temporal evolution visualization

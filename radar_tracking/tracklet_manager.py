@@ -84,13 +84,15 @@ class TrackletManager:
 
     def update(self,
                detections: List[Detection],
-               ground_truth: Optional[List[Detection]] = None) -> List[Track]:
+               ground_truth: Optional[List[Detection]] = None,
+               dt: Optional[float] = None) -> List[Track]:
         """
         Update tracking with new detections.
 
         Args:
             detections: Current frame detections
             ground_truth: Optional ground truth for evaluation
+            dt: Optional time step for this frame (if None, uses tracker default)
 
         Returns:
             List of active tracks
@@ -98,7 +100,7 @@ class TrackletManager:
         self.current_frame += 1
 
         # Update tracker
-        tracks = self.tracker.update(detections)
+        tracks = self.tracker.update(detections, dt)
 
         # Update tracklet statistics
         self._update_tracklet_statistics(tracks)

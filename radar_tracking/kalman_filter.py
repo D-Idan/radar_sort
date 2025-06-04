@@ -54,7 +54,7 @@ class RadarKalmanFilter:
         self.R = np.eye(2) * 2.0  # 2 meter standard deviation
 
         # Initial state covariance matrix
-        self.P_init = np.eye(4) * 100.0  # High initial uncertainty
+        self.P_init = np.eye(4) * 50.0  # High initial uncertainty
 
     def initiate(self, measurement: Tuple[float, float]) -> Tuple[np.ndarray, np.ndarray]:
         """

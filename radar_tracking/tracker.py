@@ -50,6 +50,7 @@ class RadarTracker:
 
         Args:
             detections: List of detections for current frame
+            dt: Optional time step for this frame (if None, uses configured dt)
 
         Returns:
             List of active tracks

@@ -31,28 +31,27 @@ def visualize_frame_radar_azimuth(
     plt.figure(figsize=(6, 6))
     ax = plt.gca()
 
-    # 1) Plot network output (predicted detections)
+    # Plot network output (blue circles)
     if detections:
         az_det = [np.degrees(d.azimuth_rad) for d in detections]
         rng_det = [d.range_m for d in detections]
         ax.scatter(az_det, rng_det, c='blue', s=20, label='Network Output', alpha=0.6)
 
-    # 2) Plot data labels (ground truth)
+    # Plot ground truth (green X)
     if ground_truth:
         az_gt = [np.degrees(d.azimuth_rad) for d in ground_truth]
         rng_gt = [d.range_m for d in ground_truth]
-        ax.scatter(az_gt, rng_gt, c='green', marker='x', s=40, label='Data Labels')
+        ax.scatter(az_gt, rng_gt, c='green', marker='x', s=40, label='Ground Truth')
 
-    # 3) Plot active tracks
+    # Plot tracks using Kalman state (red triangles)
     for track in active_tracks:
-        # Grab last_detection (assumed to exist)
-        last_det = track.last_detection
-        if last_det is None:
-            continue
-        az_tr = np.degrees(last_det.azimuth_rad)
-        rng_tr = last_det.range_m
-        ax.scatter(az_tr, rng_tr, c='red', s=30, edgecolors='black', linewidths=0.8)
-        ax.text(az_tr + 0.2, rng_tr + 0.2, f"ID {track.id}", color='red', fontsize=8)
+        range_m, azimuth_rad = track.kalman_polar_position
+        az_tr = np.degrees(azimuth_rad)
+        rng_tr = range_m
+
+        ax.scatter(az_tr, rng_tr, marker='^', s=40, facecolors='none', edgecolors='red',
+                   linewidths=0.8, label='Tracker Estimate' if track == active_tracks[0] else "")
+        ax.text(az_tr + 0.2, rng_tr + 0.2, f"T{track.id}", color='red', fontsize=8)
 
     ax.set_xlabel("Azimuth (deg)")
     ax.set_ylabel("Range (m)")
@@ -128,120 +127,59 @@ def visualize_avg_confidence_over_time(
     plt.close(fig3)
 
 
-def visualize_all_frames_overview(
+def visualize_all_frames_3d_overview(
         all_detections: List[List[Detection]],
         all_ground_truth: List[List[Detection]],
         all_tracks: List[List[Track]],
         all_frames: List[int],
-        path_save: str = "all_frames_overview.png"
+        path_save: str = "3d_tracking_overview.png"
 ):
-    """
-    Create a comprehensive visualization showing all data from all frames:
-    - Data Labels (ground truth) as green X's
-    - Network Output (detections) as blue dots
-    - Tracklets as connected red lines with different colors per track
+    """Create 3D visualization with time axis to show motion on moving platform."""
+    from mpl_toolkits.mplot3d import Axes3D
 
-    This visualization demonstrates the tracking benefits by showing how
-    the tracker connects network outputs across frames on a moving platform.
-    """
-    plt.figure(figsize=(12, 8))
-    ax = plt.gca()
+    fig = plt.figure(figsize=(14, 10))
+    ax = fig.add_subplot(111, projection='3d')
 
-    # Color map for different track IDs
-    colors = plt.cm.Set3(np.linspace(0, 1, 20))  # Generate 20 distinct colors
-    track_colors = {}
-    color_idx = 0
+    # Collect all data points
+    gt_times, gt_az, gt_rng = [], [], []
+    det_times, det_az, det_rng = [], [], []
+    track_times, track_az, track_rng = [], [], []
+    track_ids = []
 
-    # 1) Plot all data labels (ground truth) across all frames
-    all_gt_az = []
-    all_gt_rng = []
-    for frame_idx, gt_list in enumerate(all_ground_truth):
-        if gt_list:
-            for gt in gt_list:
-                all_gt_az.append(np.degrees(gt.azimuth_rad))
-                all_gt_rng.append(gt.range_m)
+    for frame_idx, frame_id in enumerate(all_frames):
+        # Ground truth
+        for gt in all_ground_truth[frame_idx]:
+            gt_times.append(frame_id)
+            gt_az.append(np.degrees(gt.azimuth_rad))
+            gt_rng.append(gt.range_m)
 
-    if all_gt_az:
-        ax.scatter(all_gt_az, all_gt_rng, c='green', marker='x', s=30,
-                   label='Data Labels', alpha=0.7, zorder=1)
+        # Detections
+        for det in all_detections[frame_idx]:
+            det_times.append(frame_id)
+            det_az.append(np.degrees(det.azimuth_rad))
+            det_rng.append(det.range_m)
 
-    # 2) Plot all network outputs across all frames
-    all_det_az = []
-    all_det_rng = []
-    for frame_idx, det_list in enumerate(all_detections):
-        if det_list:
-            for det in det_list:
-                all_det_az.append(np.degrees(det.azimuth_rad))
-                all_det_rng.append(det.range_m)
+        # Tracks (using Kalman state)
+        for track in all_tracks[frame_idx]:
+            track_times.append(frame_id)
+            range_m, azimuth_rad = track.kalman_polar_position
+            track_az.append(np.degrees(azimuth_rad))
+            track_rng.append(range_m)
+            track_ids.append(track.id)
 
-    if all_det_az:
-        ax.scatter(all_det_az, all_det_rng, c='lightblue', s=15,
-                   label='Network Output', alpha=0.5, zorder=2)
+    # Plot 3D scatter
+    ax.scatter(gt_times, gt_az, gt_rng, c='green', marker='x', s=30, alpha=0.7, label='Ground Truth')
+    ax.scatter(det_times, det_az, det_rng, c='blue', s=15, alpha=0.5, label='Detections')
+    if track_times:  # Only plot if we have track data
+        ax.scatter(track_times, track_az, track_rng, marker='^', s=40, alpha=0.3, facecolors='none', edgecolors='red', label='Tracker Estimates')
 
-    # 3) Plot tracklets as connected paths
-    # First, collect all track trajectories
-    track_trajectories = {}
 
-    for frame_idx, tracks in enumerate(all_tracks):
-        for track in tracks:
-            if track.last_detection is None:
-                continue
 
-            track_id = track.id
-            if track_id not in track_trajectories:
-                track_trajectories[track_id] = {
-                    'azimuths': [],
-                    'ranges': [],
-                    'frames': []
-                }
-
-            az = np.degrees(track.last_detection.azimuth_rad)
-            rng = track.last_detection.range_m
-
-            track_trajectories[track_id]['azimuths'].append(az)
-            track_trajectories[track_id]['ranges'].append(rng)
-            track_trajectories[track_id]['frames'].append(all_frames[frame_idx])
-
-    # Plot each track trajectory
-    for track_id, trajectory in track_trajectories.items():
-        if len(trajectory['azimuths']) < 2:  # Skip tracks with less than 2 points
-            continue
-
-        # Assign color to track
-        if track_id not in track_colors:
-            track_colors[track_id] = colors[color_idx % len(colors)]
-            color_idx += 1
-
-        color = track_colors[track_id]
-
-        # Plot trajectory line
-        ax.plot(trajectory['azimuths'], trajectory['ranges'],
-                color=color, linewidth=2, alpha=0.8, zorder=3)
-
-        # Plot track points
-        ax.scatter(trajectory['azimuths'], trajectory['ranges'],
-                   c=[color], s=40, edgecolors='black', linewidths=0.5, zorder=4)
-
-        # Label the track at its last position
-        if trajectory['azimuths']:
-            last_az = trajectory['azimuths'][-1]
-            last_rng = trajectory['ranges'][-1]
-            ax.text(last_az + 0.5, last_rng + 0.5, f"T{track_id}",
-                    color='red', fontsize=8, fontweight='bold', zorder=5)
-
-    # Add legend entry for tracklets
-    ax.plot([], [], color='red', linewidth=2, label='Tracklets', alpha=0.8)
-
-    ax.set_xlabel("Azimuth (deg)")
-    ax.set_ylabel("Range (m)")
-    ax.set_title("Radar Tracking Overview - All Frames\n" +
-                 "Showing Tracker Benefits: Connecting Network Outputs Across Frames")
-    ax.legend(loc='upper right', fontsize=10)
-    ax.grid(True, alpha=0.3)
-
-    # Set reasonable limits (adjust based on your data range)
-    ax.set_xlim(-45, 45)
-    ax.set_ylim(0, 120)
+    ax.set_xlabel('Frame ID (Time)')
+    ax.set_ylabel('Azimuth (deg)')
+    ax.set_zlabel('Range (m)')
+    ax.set_title('3D Radar Tracking: Space + Time View\nShowing Moving Platform Motion')
+    ax.legend()
 
     plt.tight_layout()
     plt.savefig(path_save, dpi=200, bbox_inches='tight')
@@ -260,90 +198,42 @@ def visualize_tracking_temporal_evolution(
     This creates a multi-panel plot showing selected frames to demonstrate
     how the tracker maintains continuity across frames.
     """
-    # Select a subset of frames to display (e.g., every 10th frame)
-    display_frames_idx = list(range(0, len(all_frames), max(1, len(all_frames) // 6)))
-    if len(display_frames_idx) > 6:
-        display_frames_idx = display_frames_idx[:6]
-
-    rows = 2
-    cols = 3
-    fig, axes = plt.subplots(rows, cols, figsize=(15, 10))
-    axes = axes.flatten()
-
-    # Color map for track consistency across subplots
-    colors = plt.cm.Set3(np.linspace(0, 1, 20))
-    track_colors = {}
-    color_idx = 0
-
-    for plot_idx, frame_idx in enumerate(display_frames_idx):
-        if plot_idx >= len(axes):
-            break
-
-        ax = axes[plot_idx]
-        frame_id = all_frames[frame_idx]
-
-        # Plot network outputs for this frame
-        detections = all_detections[frame_idx]
-        if detections:
-            az_det = [np.degrees(d.azimuth_rad) for d in detections]
-            rng_det = [d.range_m for d in detections]
-            ax.scatter(az_det, rng_det, c='lightblue', s=20, alpha=0.7)
-
-        # Plot ground truth for this frame
-        ground_truth = all_ground_truth[frame_idx]
-        if ground_truth:
-            az_gt = [np.degrees(d.azimuth_rad) for d in ground_truth]
-            rng_gt = [d.range_m for d in ground_truth]
-            ax.scatter(az_gt, rng_gt, c='green', marker='x', s=30)
-
-        # Plot tracks for this frame
-        tracks = all_tracks[frame_idx]
+    # Find longest-lived tracks
+    track_lifespans = {}
+    for frame_idx, tracks in enumerate(all_tracks):
         for track in tracks:
-            if track.last_detection is None:
-                continue
+            if track.id not in track_lifespans:
+                track_lifespans[track.id] = []
+            track_lifespans[track.id].append((all_frames[frame_idx], track))
 
-            track_id = track.id
-            if track_id not in track_colors:
-                track_colors[track_id] = colors[color_idx % len(colors)]
-                color_idx += 1
+    # Select top 3 longest tracks
+    longest_tracks = sorted(track_lifespans.items(), key=lambda x: len(x[1]), reverse=True)[:3]
 
-            color = track_colors[track_id]
-            az = np.degrees(track.last_detection.azimuth_rad)
-            rng = track.last_detection.range_m
+    fig, axes = plt.subplots(3, 1, figsize=(12, 10))
+    colors = ['red', 'blue', 'orange']
 
-            ax.scatter(az, rng, c=[color], s=50, edgecolors='black', linewidths=1)
-            ax.text(az + 0.5, rng + 0.5, f"T{track_id}",
-                    color='red', fontsize=8, fontweight='bold')
+    for i, (track_id, track_history) in enumerate(longest_tracks):
+        ax = axes[i]
 
-        ax.set_xlim(-45, 45)
-        ax.set_ylim(0, 120)
-        ax.set_title(f"Frame {frame_id}")
+        frames = [frame for frame, _ in track_history]
+        ranges = [track.kalman_polar_position[0] for _, track in track_history]
+
+        # Plot track trajectory (smoothed)
+        ax.plot(frames, ranges, color=colors[i], linewidth=2, label=f'Track {track_id} (Smoothed)')
+
+        # Plot raw detections for comparison
+        for frame, track in track_history:
+            if track.last_detection:
+                ax.scatter(frame, track.last_detection.range_m,
+                           color=colors[i], alpha=0.3, s=20, marker='o')
+
+        ax.set_ylabel('Range (m)')
+        ax.set_title(f'Track {track_id}: Kalman Smoothing vs Raw Detections')
+        ax.legend()
         ax.grid(True, alpha=0.3)
 
-        if plot_idx >= cols * (rows - 1):  # Bottom row
-            ax.set_xlabel("Azimuth (deg)")
-        if plot_idx % cols == 0:  # Left column
-            ax.set_ylabel("Range (m)")
-
-    # Hide unused subplots
-    for plot_idx in range(len(display_frames_idx), len(axes)):
-        axes[plot_idx].set_visible(False)
-
-    # Add legend
-    from matplotlib.lines import Line2D
-    legend_elements = [
-        Line2D([0], [0], marker='o', color='w', markerfacecolor='lightblue',
-               markersize=8, label='Network Output'),
-        Line2D([0], [0], marker='x', color='green', markersize=8,
-               label='Data Labels', linestyle='None'),
-        Line2D([0], [0], marker='o', color='w', markerfacecolor='red',
-               markersize=8, label='Tracklets', markeredgecolor='black')
-    ]
-    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.02), ncol=3)
-
-    plt.suptitle("Tracking Evolution Across Selected Frames\n" +
-                 "Demonstrating Track Continuity on Moving Platform", fontsize=14)
+    axes[-1].set_xlabel('Frame ID')
+    plt.suptitle('Temporal Evolution: Showing Tracker Benefits\n(Smoothing, Gap-filling, False Association Avoidance)')
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.1)
     plt.savefig(path_save, dpi=200, bbox_inches='tight')
     plt.close()
