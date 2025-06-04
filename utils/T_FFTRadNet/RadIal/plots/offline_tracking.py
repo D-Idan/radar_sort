@@ -5,9 +5,19 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import List, Optional
 from pathlib import Path
-from radar_tracking import TrackletManager, Detection
-from radar_tracking.track_viz import visualize_counts_vs_tracks_per_frame, prepare_viz_directory, \
-    visualize_frame_radar_azimuth
+
+from tqdm import tqdm
+
+from radar_tracking import TrackletManager, Detection, Track
+from radar_tracking.track_viz import (
+    visualize_counts_vs_tracks_per_frame,
+    prepare_viz_directory,
+    visualize_frame_radar_azimuth,
+    visualize_tracklet_lifetime_histogram,
+    visualize_avg_confidence_over_time,
+    visualize_all_frames_overview,
+    visualize_tracking_temporal_evolution
+)
 
 
 def setup_tracking_system():
@@ -15,13 +25,14 @@ def setup_tracking_system():
     Initialize and return a TrackletManager and its config dict.
     """
     tracker_config = {
-        'max_age': 5,        # frames to keep a track alive without new detections
-        'min_hits': 3,       # how many hits before we “confirm” a track
-        'iou_threshold': 8.0,  # maximum distance (meters) for associating dets→tracks
-        'dt': 0.1            # assumed time step between frames (you can adjust)
+        'max_age': 5,  # frames to keep a track alive without new detections
+        'min_hits': 3,  # how many hits before we "confirm" a track
+        'iou_threshold': 0.1,  # maximum distance (meters) for associating dets→tracks
+        'dt': 0.1  # assumed time step between frames (you can adjust)
     }
     manager = TrackletManager(tracker_config=tracker_config)
     return manager, tracker_config
+
 
 def load_predictions(pred_csv_path: str) -> pd.DataFrame:
     """
@@ -33,17 +44,19 @@ def load_predictions(pred_csv_path: str) -> pd.DataFrame:
     df = df.sort_values(by='sample_id').reset_index(drop=True)
     return df
 
+
 def load_labels(label_csv_path: str) -> pd.DataFrame:
     """
     Load labels.csv into a DataFrame. Expects columns including: numSample, radar_R_m, radar_A_deg, etc.
-    We’ll use numSample as sample_id, and radar_R_m, radar_A_deg as ground‐truth.
+    We'll use numSample as sample_id, and radar_R_m, radar_A_deg as ground‐truth.
     """
     df = pd.read_csv(label_csv_path, sep=r'\s+|,', engine='python')
     return df
 
+
 def build_detections_for_frame(
-    preds_df: pd.DataFrame,
-    frame_id: int
+        preds_df: pd.DataFrame,
+        frame_id: int
 ) -> list[Detection]:
     """
     Given the full predictions DataFrame and a specific frame_id (sample_id),
@@ -66,9 +79,10 @@ def build_detections_for_frame(
         dets.append(det)
     return dets
 
+
 def build_ground_truth_for_frame(
-    labels_df: pd.DataFrame,
-    frame_id: int
+        labels_df: pd.DataFrame,
+        frame_id: int
 ) -> list[Detection]:
     """
     Convert ground‐truth (labels.csv) for that frame_id into Detection objects.
@@ -82,16 +96,17 @@ def build_ground_truth_for_frame(
         gt = Detection(
             range_m=r,
             azimuth_rad=np.radians(az_deg),
-            confidence=1.0,           # ground truth = perfect confidence
+            confidence=1.0,  # ground truth = perfect confidence
             timestamp=float(frame_id)
         )
         gt_list.append(gt)
     return gt_list
 
+
 def offline_tracking(
-    preds_csv: str,
-    labels_csv: str,
-    output_tracking_csv: str
+        preds_csv: str,
+        labels_csv: str,
+        output_tracking_csv: str
 ):
     """
     Main offline‐tracking function:
@@ -99,7 +114,7 @@ def offline_tracking(
       2) Iterates over each unique frame_id in ascending order
       3) Builds Detection objects, calls tracker.update(...)
       4) Writes out one row per active track each frame into tracking.csv
-      5) Saves three simple visualizations (PNG files)
+      5) Saves comprehensive visualizations (PNG files)
     """
     # 1) Load all_predictions.csv and labels.csv
     preds_df = load_predictions(preds_csv)
@@ -114,31 +129,43 @@ def offline_tracking(
     # For storing the CSV rows
     tracking_rows = []
 
-    # For visualization:
-    #   - how many detections per frame
-    #   - how many confirmed tracks per frame
-    #   - average confidence of active tracks per frame
+    # For visualization data storage
     det_counts: List[int] = []
     track_counts: List[int] = []
     avg_confidence_per_frame: List[float] = []
 
-    ### VIZUALIZATION SETUP #TODO: Move to be as argument
-    viz_dir = "visualizations_radar"  # or any other folder you like
+    # Store all data for comprehensive visualizations
+    all_detections: List[List[Detection]] = []
+    all_ground_truth: List[List[Detection]] = []
+    all_tracks: List[List[Track]] = []
+
+    # Visualization setup
+    viz_dir = "visualizations_radar"
     prepare_viz_directory(viz_dir)
 
     # 4) Loop over frames
-    for frame_id in all_frames:
+    for frame_id in tqdm(all_frames,
+                         total=len(all_frames),
+                         desc="Processing Frames",
+                         unit="frame",
+                         colour="green",
+                         dynamic_ncols=True):
         # a) Build detections for this frame
         detections = build_detections_for_frame(preds_df, frame_id)
         det_counts.append(len(detections))
 
-        # b) Build ground truth for this frame (optional)
+        # b) Build ground truth for this frame
         ground_truth = build_ground_truth_for_frame(labels_df, frame_id)
 
         # c) Update tracker
         active_tracks = tracker.update(detections, ground_truth)
 
-        # Count how many tracks are currently “confirmed” or “tentative”
+        # Store data for comprehensive visualizations
+        all_detections.append(detections)
+        all_ground_truth.append(ground_truth)
+        all_tracks.append(active_tracks.copy())  # Make a copy to preserve state
+
+        # Count how many tracks are currently "confirmed" or "tentative"
         track_counts.append(len(active_tracks))
 
         # Compute average confidence among active tracks this frame
@@ -180,8 +207,7 @@ def offline_tracking(
             }
             tracking_rows.append(row)
 
-        # e) Optional: Visualize this frame
-        # <<< INSERT CALL TO visualize_frame_radar_azimuth HERE >>>
+        # e) Visualize this frame (individual frame visualization)
         visualize_frame_radar_azimuth(
             frame_id=frame_id,
             detections=detections,
@@ -200,9 +226,9 @@ def offline_tracking(
     track_df = track_df[cols]
     track_df.to_csv(output_tracking_csv, index=False)
 
-    # 6) Generate visualizations
+    # 6) Generate all visualizations using the visualization functions
 
-    # a) Detections per Frame vs. Confirmed Tracks per Frame
+    # a) Network Output per Frame vs. Confirmed Tracks per Frame
     visualize_counts_vs_tracks_per_frame(
         all_frames=all_frames,
         det_counts=det_counts,
@@ -210,37 +236,45 @@ def offline_tracking(
         path_save="counts_vs_tracks_per_frame.png"
     )
 
-    # b) Histogram of Tracklet Lifetimes #TODO: Create the visualisations in a dedicated file
-    summary = tracker.get_tracking_summary()
-    # The new TrackletManager summary gives us lifetime info for all tracklets:
-    # We can reconstruct an array of lifetimes by iterating through active + historical
-    all_stats = {**tracker.active_tracklets, **tracker.historical_tracklets}
-    lifetimes = np.array([sts.lifetime_frames for sts in all_stats.values()]) if all_stats else np.array([])
-    fig2, ax2 = plt.subplots(figsize=(6, 4))
-    if len(lifetimes) > 0:
-        ax2.hist(lifetimes, bins=20, edgecolor='black')
-    ax2.set_xlabel("Tracklet Lifetime (frames)")
-    ax2.set_ylabel("Number of Tracklets")
-    ax2.set_title("Histogram of Tracklet Lifetimes")
-    plt.tight_layout()
-    fig2.savefig("tracklet_lifetime_histogram.png")
-    plt.close(fig2)
+    # b) Histogram of Tracklet Lifetimes
+    visualize_tracklet_lifetime_histogram(
+        tracker=tracker,
+        path_save="tracklet_lifetime_histogram.png"
+    )
 
     # c) Average Confidence of Active Tracks Over Time
-    fig3, ax3 = plt.subplots(figsize=(8, 4))
-    ax3.plot(all_frames, avg_confidence_per_frame, marker='d', linestyle='-', color='tab:blue')
-    ax3.set_xlabel("Frame ID (sample_id)")
-    ax3.set_ylabel("Avg. Track Confidence")
-    ax3.set_title("Average Confidence of Active Tracks Over Time")
-    plt.tight_layout()
-    fig3.savefig("avg_confidence_over_time.png")
-    plt.close(fig3)
+    visualize_avg_confidence_over_time(
+        all_frames=all_frames,
+        avg_confidence_per_frame=avg_confidence_per_frame,
+        path_save="avg_confidence_over_time.png"
+    )
+
+    # d) NEW: Comprehensive overview showing all frames data
+    visualize_all_frames_overview(
+        all_detections=all_detections,
+        all_ground_truth=all_ground_truth,
+        all_tracks=all_tracks,
+        all_frames=all_frames,
+        path_save="all_frames_overview.png"
+    )
+
+    # e) NEW: Temporal evolution visualization
+    visualize_tracking_temporal_evolution(
+        all_detections=all_detections,
+        all_ground_truth=all_ground_truth,
+        all_tracks=all_tracks,
+        all_frames=all_frames,
+        path_save="tracking_temporal_evolution.png"
+    )
 
     print(f"\nOffline tracking completed. Files written:\n"
           f"  • {output_tracking_csv}\n"
           f"  • counts_vs_tracks_per_frame.png\n"
           f"  • tracklet_lifetime_histogram.png\n"
-          f"  • avg_confidence_over_time.png\n")
+          f"  • avg_confidence_over_time.png\n"
+          f"  • all_frames_overview.png\n"
+          f"  • tracking_temporal_evolution.png\n"
+          f"  • Individual frame visualizations in {viz_dir}/\n")
 
 if __name__ == "__main__":
     # import argparse
