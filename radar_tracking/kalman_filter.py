@@ -42,7 +42,7 @@ class RadarKalmanFilter:
         ])
 
         # Process noise covariance matrix
-        q = 1.0  # Process noise magnitude
+        q = 10.0  # Process noise magnitude
         self.Q = np.array([
             [dt ** 4 / 4, 0, dt ** 3 / 2, 0],
             [0, dt ** 4 / 4, 0, dt ** 3 / 2],
@@ -51,7 +51,7 @@ class RadarKalmanFilter:
         ]) * q
 
         # Measurement noise covariance matrix
-        self.R = np.eye(2) * 2.0  # 2 meter standard deviation
+        self.R = np.eye(2) * 0.5  # 0.5 meter standard deviation
 
         # Initial state covariance matrix
         self.P_init = np.eye(4) * 50.0  # High initial uncertainty

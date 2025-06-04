@@ -1,4 +1,5 @@
 # offline_tracking.py
+import copy
 
 import numpy as np
 import pandas as pd
@@ -139,7 +140,7 @@ def offline_tracking(
     all_ground_truth: List[List[Detection]] = []
     all_tracks: List[List[Track]] = []
 
-    # Visualization setup
+    # Visualization setup #TODO: Make this configurable
     viz_dir = "visualizations_radar"
     prepare_viz_directory(viz_dir)
 
@@ -175,7 +176,7 @@ def offline_tracking(
         # Store data for comprehensive visualizations
         all_detections.append(detections)
         all_ground_truth.append(ground_truth)
-        all_tracks.append(active_tracks.copy())  # Make a copy to preserve state
+        all_tracks.append(copy.deepcopy(active_tracks))  # Make a copy to preserve state
 
         # Count how many tracks are currently "confirmed" or "tentative"
         track_counts.append(len(active_tracks))

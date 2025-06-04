@@ -35,13 +35,13 @@ def visualize_frame_radar_azimuth(
     if detections:
         az_det = [np.degrees(d.azimuth_rad) for d in detections]
         rng_det = [d.range_m for d in detections]
-        ax.scatter(az_det, rng_det, c='blue', s=20, label='Network Output', alpha=0.6)
+        ax.scatter(az_det, rng_det, c='blue', s=20, label='Network Output', alpha=1.0)
 
     # Plot ground truth (green X)
     if ground_truth:
         az_gt = [np.degrees(d.azimuth_rad) for d in ground_truth]
         rng_gt = [d.range_m for d in ground_truth]
-        ax.scatter(az_gt, rng_gt, c='green', marker='x', s=40, label='Ground Truth')
+        ax.scatter(az_gt, rng_gt, c='green', marker='x', s=60, label='Ground Truth')
 
     # Plot tracks using Kalman state (red triangles)
     for track in active_tracks:
@@ -49,7 +49,7 @@ def visualize_frame_radar_azimuth(
         az_tr = np.degrees(azimuth_rad)
         rng_tr = range_m
 
-        ax.scatter(az_tr, rng_tr, marker='^', s=40, facecolors='none', edgecolors='red',
+        ax.scatter(az_tr, rng_tr, marker='^', s=20, facecolors='none', edgecolors='red',
                    linewidths=0.8, label='Tracker Estimate' if track == active_tracks[0] else "")
         ax.text(az_tr + 0.2, rng_tr + 0.2, f"T{track.id}", color='red', fontsize=8)
 
@@ -57,7 +57,7 @@ def visualize_frame_radar_azimuth(
     ax.set_ylabel("Range (m)")
     ax.set_title(f"Frame {frame_id:06d}")
     ax.legend(loc='upper right', fontsize=8)
-    ax.set_xlim(-45, 45)  # adjust as needed for your sensor's FoV
+    ax.set_xlim(90, -90)  # adjust as needed for your sensor's FoV
     ax.set_ylim(0, 120)  # adjust to your max radar range
 
     plt.tight_layout()
@@ -163,7 +163,7 @@ def visualize_all_frames_3d_overview(
         for track in all_tracks[frame_idx]:
             track_times.append(frame_id)
             range_m, azimuth_rad = track.kalman_polar_position
-            track_az.append(np.degrees(azimuth_rad))
+            track_az.append(np.rad2deg(azimuth_rad))
             track_rng.append(range_m)
             track_ids.append(track.id)
 
@@ -171,7 +171,7 @@ def visualize_all_frames_3d_overview(
     ax.scatter(gt_times, gt_az, gt_rng, c='green', marker='x', s=30, alpha=0.7, label='Ground Truth')
     ax.scatter(det_times, det_az, det_rng, c='blue', s=15, alpha=0.5, label='Detections')
     if track_times:  # Only plot if we have track data
-        ax.scatter(track_times, track_az, track_rng, marker='^', s=40, alpha=0.3, facecolors='none', edgecolors='red', label='Tracker Estimates')
+        ax.scatter(track_times, track_az, track_rng, marker='^', s=40, alpha=0.7, facecolors='none', edgecolors='red', label='Tracker Estimates')
 
 
 
