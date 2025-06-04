@@ -127,7 +127,20 @@ def offline_tracking(
     prepare_viz_directory(viz_dir)
 
     # 4) Loop over frames
+    prev_frame_id = None
+    base_dt = config['dt'] # configured dt from setup_tracking_system
+
     for frame_id in all_frames:
+
+        # Calculate dynamic dt
+        if prev_frame_id is not None:
+            frame_gap = frame_id - prev_frame_id
+            dynamic_dt = frame_gap * base_dt
+        else:
+            dynamic_dt = base_dt
+        # Store prev_frame_id
+        prev_frame_id = frame_id
+
         # a) Build detections for this frame
         detections = build_detections_for_frame(preds_df, frame_id)
         det_counts.append(len(detections))
@@ -136,7 +149,7 @@ def offline_tracking(
         ground_truth = build_ground_truth_for_frame(labels_df, frame_id)
 
         # c) Update tracker
-        active_tracks = tracker.update(detections, ground_truth)
+        active_tracks = tracker.update(detections, ground_truth, dt=dynamic_dt)
 
         # Count how many tracks are currently “confirmed” or “tentative”
         track_counts.append(len(active_tracks))

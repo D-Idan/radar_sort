@@ -67,6 +67,12 @@ class Track:
         """Get current velocity estimate."""
         return (self.state[2], self.state[3])
 
+    @property
+    def kalman_polar_position(self) -> Tuple[float, float]:
+        """Get current position in polar coordinates."""
+        from radar_tracking.coordinate_transforms import cartesian_to_polar
+        return cartesian_to_polar(self.state[0], self.state[1])
+
 
 @dataclass
 class TrackingResult:

@@ -44,9 +44,9 @@ class RadarTracker:
         self.next_id = 1
         self.frame_count = 0
 
-    def update(self, detections: List[Detection]) -> List[Track]:
+    def update(self, detections: List[Detection], dt: Optional[float] = None) -> List[Track]:
         """
-        Update tracker with new detections.
+        Update tracker with new detections and dynamic time step.
 
         Args:
             detections: List of detections for current frame
@@ -54,10 +54,11 @@ class RadarTracker:
         Returns:
             List of active tracks
         """
-        self.frame_count += 1
+        # Use provided dt or fallback to configured dt
+        frame_dt = dt if dt is not None else self.dt
 
-        # Predict all existing tracks
-        self._predict_tracks()
+        # Predict all existing tracks with frame-specific dt
+        self._predict_tracks(frame_dt)
 
         # Associate detections with tracks
         matches, unmatched_detections, unmatched_tracks = self._associate(detections)
@@ -83,11 +84,22 @@ class RadarTracker:
         # Return confirmed tracks
         return self._get_confirmed_tracks()
 
-    def _predict_tracks(self):
-        """Predict all existing tracks to current frame."""
+    def _predict_tracks(self, dt: float):
+        """Predict all existing tracks with specific time step."""
         for track in self.tracks:
+            # Update Kalman filter dt temporarily
+            old_dt = self.kf.dt
+            self.kf.dt = dt
+            self.kf.F[0, 2] = dt  # Update state transition matrix
+            self.kf.F[1, 3] = dt
+
             track.state, track.covariance = self.kf.predict(track.state, track.covariance)
             track.age += 1
+
+            # Restore original dt
+            self.kf.dt = old_dt
+            self.kf.F[0, 2] = old_dt
+            self.kf.F[1, 3] = old_dt
 
     def _associate(self, detections: List[Detection]) -> Tuple[List[Tuple[int, int]],
     List[int],
@@ -151,7 +163,8 @@ class RadarTracker:
 
     def _update_track(self, track: Track, detection: Detection) -> Track:
         """
-        Update track with associated detection.  On the *second* detection for a given track (i.e. when hits == 1),
+        Update track with associated detection, Update track - store Kalman state, not raw detection.
+        On the *second* detection for a given track (i.e. when hits == 1),
         compute an explicit velocity estimate from (x_prev, y_prev) → (x_new, y_new) before calling kf.update().
         """
 
@@ -181,6 +194,7 @@ class RadarTracker:
         else:
             # If not the second detection, use the normal predict→update cycle
             # (Note: _predict_tracks() already called predict() for every track in update()).
+            # Update Kalman state
             track.state, track.covariance = self.kf.update(
                 track.state, track.covariance, detection.cartesian_pos
             )
