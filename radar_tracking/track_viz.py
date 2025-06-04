@@ -248,7 +248,8 @@ def visualize_tracking_temporal_evolution(
         all_ground_truth: List[List[Detection]],
         all_tracks: List[List[Track]],
         all_frames: List[int],
-        path_save: str = "tracking_temporal_evolution.png"
+        num_tracks: Optional[int] = 3,
+        path_save: str = "tracking_temporal_evolution.png",
 ):
     """
     Create a temporal visualization showing how tracks evolve over time.
@@ -263,10 +264,10 @@ def visualize_tracking_temporal_evolution(
                 track_lifespans[track.id] = []
             track_lifespans[track.id].append((all_frames[frame_idx], track))
 
-    # Select top 3 longest tracks
-    longest_tracks = sorted(track_lifespans.items(), key=lambda x: len(x[1]), reverse=True)[:3]
+    # Select top num_tracks longest tracks
+    longest_tracks = sorted(track_lifespans.items(), key=lambda x: len(x[1]), reverse=True)[:num_tracks]
 
-    fig, axes = plt.subplots(3, 1, figsize=(12, 10))
+    fig, axes = plt.subplots(num_tracks, 1, figsize=(12, 10))
     colors = ['red', 'blue', 'orange']
 
     for i, (track_id, track_history) in enumerate(longest_tracks):
