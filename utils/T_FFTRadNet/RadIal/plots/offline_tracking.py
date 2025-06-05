@@ -1,5 +1,7 @@
 # offline_tracking.py
 import copy
+import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -12,7 +14,7 @@ from tqdm import tqdm
 from radar_tracking import TrackletManager, Detection, Track
 from radar_tracking.track_viz import (
     visualize_counts_vs_tracks_per_frame,
-    prepare_viz_directory,
+    prepare_output_directories,
     visualize_frame_radar_azimuth,
     visualize_tracklet_lifetime_histogram,
     visualize_avg_confidence_over_time,
@@ -26,10 +28,24 @@ def setup_tracking_system():
     Initialize and return a TrackletManager and its config dict.
     """
     tracker_config = {
-        'max_age': 5,  # frames to keep a track alive without new detections
-        'min_hits': 3,  # how many hits before we "confirm" a track
-        'iou_threshold': 10.0,  # maximum distance (meters) for associating dets→tracks
-        'dt': 0.1  # assumed time step between frames (you can adjust)
+        'max_age': 3,
+        'min_hits': 3,
+        'iou_threshold': 5.0,
+        'dt': 0.1,
+
+        # Confidence-based parameters
+        'min_confidence_init': 0.7,
+        'min_confidence_assoc': 0.4,
+        'confidence_weight': 0.3,
+        'association_strategy': 'confidence_weighted',
+
+        # Range culling parameters - configured for your radar
+        'enable_range_culling': True,
+        'max_range': 103.0,  # Your radar's max range
+        'min_azimuth_deg': -90.0,  # Your radar's azimuth limits
+        'max_azimuth_deg': 90.0,
+        'range_buffer': 10.0,  # 10m buffer to avoid killing tracks just outside
+        'azimuth_buffer_deg': 5.0  # 5° buffer for azimuth
     }
     manager = TrackletManager(tracker_config=tracker_config)
     return manager, tracker_config
@@ -104,10 +120,56 @@ def build_ground_truth_for_frame(
     return gt_list
 
 
+def setup_output_directories(output_dir: str) -> dict:
+    """
+    Create standardized output directory structure.
+
+    Args:
+        output_dir: Root output directory path
+
+    Returns:
+        Dictionary with paths to different output subdirectories
+    """
+    output_path = Path(output_dir)
+
+    # Define subdirectory structure
+    subdirs = {
+        'root': output_path,
+        'tracks': output_path / 'tracks',
+        'visualizations': output_path / 'visualizations',
+        'frame_images': output_path / 'visualizations' / 'frames',
+        'summary_plots': output_path / 'visualizations' / 'summary',
+        'logs': output_path / 'logs',
+        'config': output_path / 'config'
+    }
+
+    # Create all directories
+    for subdir_path in subdirs.values():
+        subdir_path.mkdir(parents=True, exist_ok=True)
+
+    return subdirs
+
+
+def save_config_info(config: dict, tracker_config: dict, output_paths: dict):
+    """Save configuration information to the config directory."""
+    config_info = {
+        'tracker_config': tracker_config,
+        'processing_config': config,
+        'output_structure': {k: str(v) for k, v in output_paths.items()}
+    }
+
+    config_file = output_paths['config'] / 'tracking_config.json'
+    with open(config_file, 'w') as f:
+        json.dump(config_info, f, indent=2)
+
+    print(f"Configuration saved to: {config_file}")
+
+
 def offline_tracking(
         preds_csv: str,
         labels_csv: str,
-        output_tracking_csv: str
+        output_dir: str = "tracking_output",
+        tracker_config: Optional[dict] = None
 ):
     """
     Main offline‐tracking function:
@@ -116,7 +178,18 @@ def offline_tracking(
       3) Builds Detection objects, calls tracker.update(...)
       4) Writes out one row per active track each frame into tracking.csv
       5) Saves comprehensive visualizations (PNG files)
+
+    Args:
+        preds_csv: Path to predictions CSV file
+        labels_csv: Path to labels CSV file
+        output_dir: Root directory for all outputs
+        tracker_config: Optional tracker configuration override
     """
+
+    # Setup output directory structure
+    output_paths = setup_output_directories(output_dir)
+    print(f"Output directory structure created at: {output_paths['root']}")
+
     # 1) Load all_predictions.csv and labels.csv
     preds_df = load_predictions(preds_csv)
     labels_df = load_labels(labels_csv)
@@ -125,7 +198,16 @@ def offline_tracking(
     all_frames = sorted(preds_df['sample_id'].unique().tolist())
 
     # 3) Initialize tracker
-    tracker, config = setup_tracking_system()
+    if tracker_config is not None:
+        # Override default config
+        manager = TrackletManager(tracker_config=tracker_config)
+        config = tracker_config
+    else:
+        manager, config = setup_tracking_system()
+
+    # Save configuration
+    save_config_info({'preds_csv': preds_csv, 'labels_csv': labels_csv},
+                     config, output_paths)
 
     # For storing the CSV rows
     tracking_rows = []
@@ -140,13 +222,9 @@ def offline_tracking(
     all_ground_truth: List[List[Detection]] = []
     all_tracks: List[List[Track]] = []
 
-    # Visualization setup #TODO: Make this configurable
-    viz_dir = "visualizations_radar"
-    prepare_viz_directory(viz_dir)
-
     # 4) Loop over frames
     prev_frame_id = None
-    base_dt = config['dt'] # configured dt from setup_tracking_system
+    base_dt = config['dt']
     for frame_id in tqdm(all_frames,
                          total=len(all_frames),
                          desc="Processing Frames",
@@ -171,12 +249,12 @@ def offline_tracking(
         ground_truth = build_ground_truth_for_frame(labels_df, frame_id)
 
         # c) Update tracker
-        active_tracks = tracker.update(detections, ground_truth, dt=dynamic_dt)
+        active_tracks = manager.update(detections, ground_truth, dt=dynamic_dt)
 
         # Store data for comprehensive visualizations
         all_detections.append(detections)
         all_ground_truth.append(ground_truth)
-        all_tracks.append(copy.deepcopy(active_tracks))  # Make a copy to preserve state
+        all_tracks.append(copy.deepcopy(active_tracks))
 
         # Count how many tracks are currently "confirmed" or "tentative"
         track_counts.append(len(active_tracks))
@@ -226,7 +304,7 @@ def offline_tracking(
             detections=detections,
             ground_truth=ground_truth,
             active_tracks=active_tracks,
-            viz_dir=viz_dir
+            output_dir=str(output_paths['frame_images'])
         )
 
     # 5) Build DataFrame and write tracking.csv
@@ -237,7 +315,10 @@ def offline_tracking(
         'x1', 'y1', 'x2', 'y2', 'x3', 'y3', 'x4', 'y4'
     ]
     track_df = track_df[cols]
-    track_df.to_csv(output_tracking_csv, index=False)
+
+    # Save tracking results
+    tracking_csv_path = output_paths['tracks'] / 'tracking.csv'
+    track_df.to_csv(tracking_csv_path, index=False)
 
     # 6) Generate all visualizations using the visualization functions
 
@@ -246,69 +327,60 @@ def offline_tracking(
         all_frames=all_frames,
         det_counts=det_counts,
         track_counts=track_counts,
-        path_save="counts_vs_tracks_per_frame.png"
+        output_dir=str(output_paths['summary_plots'])
     )
 
     # b) Histogram of Tracklet Lifetimes
     visualize_tracklet_lifetime_histogram(
-        tracker=tracker,
-        path_save="tracklet_lifetime_histogram.png"
+        manager=manager,
+        output_dir=str(output_paths['summary_plots'])
     )
 
     # c) Average Confidence of Active Tracks Over Time
     visualize_avg_confidence_over_time(
         all_frames=all_frames,
         avg_confidence_per_frame=avg_confidence_per_frame,
-        path_save="avg_confidence_over_time.png"
+        output_dir=str(output_paths['summary_plots'])
     )
 
-    # d) NEW: Comprehensive overview showing all frames data
+    # d) Comprehensive overview showing all frames data
     visualize_all_frames_3d_overview(
         all_detections=all_detections,
         all_ground_truth=all_ground_truth,
         all_tracks=all_tracks,
         all_frames=all_frames,
-        path_save="3d_tracking_overview.png"
+        output_dir=str(output_paths['summary_plots'])
     )
 
-    # e) NEW: Temporal evolution visualization
+    # e) Temporal evolution visualization
     visualize_tracking_temporal_evolution(
         all_detections=all_detections,
         all_ground_truth=all_ground_truth,
         all_tracks=all_tracks,
         all_frames=all_frames,
-        path_save="tracking_temporal_evolution.png"
+        output_dir=str(output_paths['summary_plots'])
     )
 
-    print(f"\nOffline tracking completed. Files written:\n"
-          f"  • {output_tracking_csv}\n"
-          f"  • counts_vs_tracks_per_frame.png\n"
-          f"  • tracklet_lifetime_histogram.png\n"
-          f"  • avg_confidence_over_time.png\n"
-          f"  • all_frames_overview.png\n"
-          f"  • tracking_temporal_evolution.png\n"
-          f"  • Individual frame visualizations in {viz_dir}/\n")
+    # Save tracking summary
+    summary_file = output_paths['logs'] / 'tracking_summary.txt'
+    with open(summary_file, 'w') as f:
+        # Redirect print output to file
+        import sys
+        original_stdout = sys.stdout
+        sys.stdout = f
+        manager.print_summary()
+        sys.stdout = original_stdout
+
+    # Print completion message
+    print(f"\nOffline tracking completed. Files written to: {output_paths['root']}")
+    print(f"  • Tracking results: {tracking_csv_path}")
+    print(f"  • Visualizations: {output_paths['visualizations']}")
+    print(f"  • Configuration: {output_paths['config']}")
+    print(f"  • Logs: {output_paths['logs']}")
+    print(f"  • Tracker configuration: {config}")
+
 
 if __name__ == "__main__":
-    # import argparse
-    #
-    # parser = argparse.ArgumentParser(
-    #     description="Run offline tracking on all_predictions.csv and generate simple visualizations."
-    # )
-    # parser.add_argument(
-    #     "--preds", type=str, required=True,
-    #     help="Path to all_predictions.csv"
-    # )
-    # parser.add_argument(
-    #     "--labels", type=str, required=True,
-    #     help="Path to labels.csv (ground truth)"
-    # )
-    # parser.add_argument(
-    #     "--out", type=str, default="tracking.csv",
-    #     help="Output CSV filename for tracking results"
-    # )
-    # args = parser.parse_args()
-
     from pathlib import Path
     import json
 
@@ -319,15 +391,38 @@ if __name__ == "__main__":
     path_config_default = path_repo / Path('T_FFTRadNet/RadIal/ADCProcessing/data_config.json')
     config = json.load(open(path_config_default))
     record = config['target_value']
-    root_folder = Path(config['Data_Dir'], 'RadIal_Data',record)
+    root_folder = Path(config['Data_Dir'], 'RadIal_Data', record)
     labels_csv = Path(root_folder, 'labels.csv')
 
     path_file_par = Path(__file__).parent
 
+    # Example with custom tracker config for confidence-based tracking
+    custom_tracker_config = {
+        'max_age': 3,
+        'min_hits': 3,
+        'iou_threshold': 6.0,
+        'dt': 0.1,
+
+        # Confidence-based parameters
+        'min_confidence_init': 0.7,
+        'min_confidence_assoc': 0.4,
+        'confidence_weight': 0.3,
+        'association_strategy': 'confidence_weighted', #  "distance_only", "confidence_weighted", "confidence_gated", "hybrid_score"
+
+        # Range culling parameters - configured for your radar
+        'enable_range_culling': True,
+        'max_range': 103.0,  # Your radar's max range
+        'min_azimuth_deg': -90.0,  # Your radar's azimuth limits
+        'max_azimuth_deg': 90.0,
+        'range_buffer': 10.0,  # 10m buffer to avoid killing tracks just outside
+        'azimuth_buffer_deg': 5.0  # 5° buffer for azimuth
+    }
+
     args = {
-        'preds_csv': path_file_par / Path('./predictions/all_predictions.csv'),
-        'labels_csv': Path(labels_csv),
-        'output_tracking_csv': path_file_par / Path('./predictions/tracking.csv'),
+        'preds_csv': str(path_file_par / Path('./predictions/all_predictions.csv')),
+        'labels_csv': str(labels_csv),
+        'output_dir': str(path_file_par / Path('./tracking_output')),
+        'tracker_config': custom_tracker_config
     }
 
     offline_tracking(**args)

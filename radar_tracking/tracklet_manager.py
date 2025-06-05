@@ -58,7 +58,7 @@ class TrackletManager:
 
     def __init__(self,
                  tracker_config: Dict = None,
-                 track_buffer_size: int = 100):
+                 track_buffer_size: int = 1000):
         """
         Initialize tracklet manager.
 
