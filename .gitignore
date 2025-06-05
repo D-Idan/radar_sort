@@ -60,6 +60,7 @@ external/*
 *.png
 *.jpg
 
-# CSV and JSON results
+# CSV, JSON results, zip files
 *.csv
 *.json
+*.zip
