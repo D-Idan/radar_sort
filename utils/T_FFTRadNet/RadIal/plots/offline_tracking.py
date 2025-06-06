@@ -21,7 +21,8 @@ from radar_tracking.track_viz import (
     visualize_all_frames_3d_overview,
     visualize_tracking_temporal_evolution
 )
-
+from tracking_visualization import TrackingVisualizationTool, create_tracking_video
+from utils.T_FFTRadNet.RadIal.utils.tracking_metrics import TrackingEvaluator, evaluate_tracking_sequence
 
 def setup_tracking_system():
     """
@@ -169,10 +170,12 @@ def offline_tracking(
         preds_csv: str,
         labels_csv: str,
         output_dir: str = "tracking_output",
-        tracker_config: Optional[dict] = None
+        tracker_config: Optional[dict] = None,
+        create_video: bool = True,
+        max_video_samples: Optional[int] = 100
 ):
     """
-    Main offline‐tracking function:
+    Main offline‐tracking function with visualization and evaluation:
       1) Reads predictions + labels
       2) Iterates over each unique frame_id in ascending order
       3) Builds Detection objects, calls tracker.update(...)
@@ -184,6 +187,8 @@ def offline_tracking(
         labels_csv: Path to labels CSV file
         output_dir: Root directory for all outputs
         tracker_config: Optional tracker configuration override
+        create_video: Whether to create tracking visualization video
+        max_video_samples: Maximum samples to include in video (for performance)
     """
 
     # Setup output directory structure
@@ -371,12 +376,90 @@ def offline_tracking(
         manager.print_summary()
         sys.stdout = original_stdout
 
+    # ===== ENHANCED EVALUATION METRICS =====
+    print("\nRunning comprehensive tracking evaluation...")
+
+    evaluator = TrackingEvaluator(distance_threshold=config.get('iou_threshold', 5.0))
+
+    # Evaluate frame by frame
+    for frame_id in all_frames:
+        # Filter data for this frame
+        frame_preds = preds_df[preds_df['sample_id'] == frame_id]
+        frame_labels = labels_df[labels_df['numSample'] == frame_id]
+        frame_tracks = track_df[track_df['sample_id'] == frame_id] if not track_df.empty else pd.DataFrame()
+
+        if not frame_labels.empty:  # Only evaluate frames with ground truth
+            evaluator.evaluate_frame(frame_preds, frame_labels, frame_tracks, frame_id)
+
+    # Generate and save comprehensive evaluation report
+    evaluation_report = evaluator.generate_comprehensive_report()
+    eval_report_path = output_paths['logs'] / 'comprehensive_evaluation.json'
+    evaluator.save_report(str(eval_report_path))
+
+    # Save summary metrics to text file
+    summary_path = output_paths['logs'] / 'evaluation_summary.txt'
+    with open(summary_path, 'w') as f:
+        f.write("COMPREHENSIVE TRACKING EVALUATION SUMMARY\n")
+        f.write("=" * 50 + "\n\n")
+
+        if 'summary' in evaluation_report:
+            summary = evaluation_report['summary']
+            f.write(f"Frames Evaluated: {summary.get('frames_evaluated', 0)}\n")
+            f.write(f"MOTA (Multiple Object Tracking Accuracy): {summary.get('mota', 0):.3f}\n")
+            f.write(f"MOTP (Multiple Object Tracking Precision): {summary.get('motp', 0):.3f} meters\n\n")
+
+        if 'detection_performance' in evaluation_report:
+            det_perf = evaluation_report['detection_performance']
+            f.write("DETECTION PERFORMANCE:\n")
+            f.write(f"  Overall Precision: {det_perf.get('overall_precision', 0):.3f}\n")
+            f.write(f"  Overall Recall: {det_perf.get('overall_recall', 0):.3f}\n")
+            f.write(f"  Overall F1-Score: {det_perf.get('overall_f1_score', 0):.3f}\n\n")
+
+        if 'tracking_performance' in evaluation_report:
+            track_perf = evaluation_report['tracking_performance']
+            f.write("TRACKING PERFORMANCE:\n")
+            f.write(f"  Overall Precision: {track_perf.get('overall_precision', 0):.3f}\n")
+            f.write(f"  Overall Recall: {track_perf.get('overall_recall', 0):.3f}\n")
+            f.write(f"  Overall F1-Score: {track_perf.get('overall_f1_score', 0):.3f}\n\n")
+
+        if 'distance_analysis' in evaluation_report:
+            dist_analysis = evaluation_report['distance_analysis']
+            f.write("DISTANCE ANALYSIS:\n")
+            f.write(f"  Mean Distance Error: {dist_analysis.get('overall_mean_distance', 0):.2f} meters\n")
+            f.write(f"  Distance Std Dev: {dist_analysis.get('overall_std_distance', 0):.2f} meters\n")
+            f.write(f"  Frames with Valid Associations: {dist_analysis.get('frames_with_valid_associations', 0)}\n\n")
+
+    # ===== ENHANCED VISUALIZATION AND VIDEO CREATION =====
+    if create_video:
+        print("\nCreating tracking visualization video...")
+
+        # Setup data directory path
+        data_dir = Path(labels_csv).parent
+
+        try:
+            video_path = create_tracking_video(
+                data_dir=data_dir,
+                output_dir=output_paths['visualizations'],
+                labels_csv=labels_csv,
+                predictions_csv=preds_csv,
+                tracking_csv=str(tracking_csv_path),
+                max_samples=max_video_samples
+            )
+            print(f"Tracking video created: {video_path}")
+
+        except Exception as e:
+            print(f"Video creation failed: {e}")
+            print("Continuing without video...")
+
     # Print completion message
     print(f"\nOffline tracking completed. Files written to: {output_paths['root']}")
     print(f"  • Tracking results: {tracking_csv_path}")
     print(f"  • Visualizations: {output_paths['visualizations']}")
+    print(f"  • Evaluation report: {eval_report_path}")
     print(f"  • Configuration: {output_paths['config']}")
     print(f"  • Logs: {output_paths['logs']}")
+    if create_video:
+        print(f"  • Tracking video: {output_paths['visualizations']}")
     print(f"  • Tracker configuration: {config}")
 
 
