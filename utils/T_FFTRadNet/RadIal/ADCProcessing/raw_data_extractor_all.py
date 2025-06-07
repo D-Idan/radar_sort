@@ -29,7 +29,7 @@ def extract_all(config):
     root_folder = Path(config['Data_Dir'], record)
 
     # Prepare output folder structure
-    base = os.path.join(output_dir, 'RadIal_Data',record)
+    base = os.path.join(output_dir, 'RadIal_Data', record)
     subdirs = [
         'ADC_Data', 'camera', 'laser_PCL',
         'radar_FFT', 'radar_Freespace', 'radar_PCL', 'radar_RD', 'radar_RA',
@@ -52,7 +52,11 @@ def extract_all(config):
         numSample = rec_labels[rec_labels['index'] == idx]['numSample'].iloc[0]
         tag = f"{numSample:06d}"
 
-        # 1. ADC_Data (skipped)
+        # Extract timestamp (using camera as reference, but you can use any sensor)
+        # The timestamp is in microseconds
+        timestamp = sample['radar_ch1']['timestamp']
+
+        # 1. ADC_Data
         adc = RSP_ADC.run(
             sample['radar_ch0']['data'], sample['radar_ch1']['data'],
             sample['radar_ch2']['data'], sample['radar_ch3']['data']
@@ -65,13 +69,12 @@ def extract_all(config):
         # Resize to (width=960, height=540)
         resized = cv2.resize(cam, (960, 540))
         cv2.imwrite(img_path, resized)
-        # imageio.imwrite(img_path, cam)
 
         # 3. radar_RD -> save as NPY
         rd = RSP_RD.run(sample['radar_ch0']['data'], sample['radar_ch1']['data'],
                         sample['radar_ch2']['data'], sample['radar_ch3']['data']
                         ).numpy()
-        rd_map = np.log10(np.sum(np.abs(rd), axis=2) + 1e-6) # ensures log-scaling is numerically stable, even when some range-Doppler bins are zero-energy.
+        rd_map = np.log10(np.sum(np.abs(rd), axis=2) + 1e-6)
         np.save(os.path.join(base, 'radar_RD', f'rd_{tag}.npy'), rd_map)
 
         # 4. radar_RA -> save as NPY
@@ -80,51 +83,24 @@ def extract_all(config):
                         )
         np.save(os.path.join(base, 'radar_RA', f'ra_{tag}.npy'), ra)
 
-        # # 3. laser_PCL -> save as NPY
-        # pcl = sample['scala']['data']
-        # np.save(os.path.join(base, 'laser_PCL', f'laser_{tag}.npy'), pcl)
-
-        # # 4. radar FFT -> RD spectrums
-        # rd = RSP_RD.run(
-        #     sample['radar_ch0']['data'], sample['radar_ch1']['data'],
-        #     sample['radar_ch2']['data'], sample['radar_ch3']['data']
-        # )
-        # np.save(os.path.join(base, 'radar_FFT', f'rd_{tag}.npy'), rd)
-
-        # # # 5. radar Freespace -> RA map
-        # # ra = RSP_RA.run(
-        # #     sample['radar_ch0']['data'], sample['radar_ch1']['data'],
-        # #     sample['radar_ch2']['data'], sample['radar_ch3']['data']
-        # # )
-        # # np.save(os.path.join(base, 'radar_Freespace', f'ra_{tag}.npy'), ra)
-        #
-        # # 6. radar PCL -> PC point cloud
-        # pc = RSP_PC.run(
-        #     sample['radar_ch0']['data'], sample['radar_ch1']['data'],
-        #     sample['radar_ch2']['data'], sample['radar_ch3']['data']
-        # )
-        # # save as CSV: Range, Doppler, Azimuth, Elevation
-        # pcl_cols = ['Range', 'Doppler', 'Azimuth', 'Elevation']
-        # pc_df = pd.DataFrame(pc, columns=pcl_cols)
-        # pc_df.to_csv(
-        #     os.path.join(base, 'radar_PCL', f'pcl_{tag}.csv'),
-        #     index=False
-        # )
-
-        # collect label entries
+        # collect label entries with timestamp
         boxes = rec_labels[rec_labels['index'] == idx]
         boxes_out = boxes.copy()
         boxes_out['filename'] = tag
+        boxes_out['timestamp_us'] = timestamp  # Add timestamp in microseconds
         collected.append(boxes_out)
 
     # write aggregated labels.csv
     if collected:
         all_labels = pd.concat(collected, ignore_index=True)
+        # Sort by timestamp to ensure chronological order
+        all_labels = all_labels.sort_values('timestamp_us')
         all_labels.to_csv(os.path.join(base, 'labels.csv'), index=False)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Extract and organize RadIal data')
-    parser.add_argument('-c', '--config', default='./data_config.json',type=str,
+    parser.add_argument('-c', '--config', default='./data_config.json', type=str,
                         help='Path to the config file (default: config.json)')
     args = parser.parse_args()
 
