@@ -505,7 +505,9 @@ if __name__ == "__main__":
         'preds_csv': str(path_file_par / Path('./predictions/all_predictions.csv')),
         'labels_csv': str(labels_csv),
         'output_dir': str(path_file_par / Path('./tracking_output')),
-        'tracker_config': custom_tracker_config
+        'tracker_config': custom_tracker_config,
+        'create_video': True,
+        'max_video_samples': 50  # Limit video to first 50 samples for performance
     }
 
     offline_tracking(**args)

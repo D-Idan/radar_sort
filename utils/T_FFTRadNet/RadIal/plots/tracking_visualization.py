@@ -1,6 +1,5 @@
 """
-Improved tracking visualization with consistent styling across all views.
-Replaces the unsatisfactory BEV visualization with polar-map-style rendering.
+Enhanced tracking visualization with improved styling and coordinate systems.
 """
 import pandas as pd
 import numpy as np
@@ -32,14 +31,43 @@ class TrackingVisualizationTool:
             'max_azimuth': 90.0
         }
 
-        # Consistent styling across all visualizations
+        # Enhanced styling with improved symbols and sizing
+        # Base sizes for radar maps: X=4x base, circles=2x base, triangles=1x base
+        base_size = 50
         self.style_config = {
-            'ground_truth': {'color': 'green', 'marker': 'o', 'size': 80, 'alpha': 0.9, 'label': 'Ground Truth'},
-            'detections': {'color': 'red', 'marker': 'x', 'size': 60, 'alpha': 0.8, 'label': 'Network Output'},
-            'tracks': {'color': 'blue', 'marker': '^', 'size': 70, 'alpha': 0.9, 'label': 'Tracker State'},
+            'labels': {
+                'color': 'green',
+                'marker': 'x',
+                'size_base': base_size * 4,  # 4x base size
+                'alpha': 0.9,
+                'label': 'Labels',
+                'linewidth': 3
+            },
+            'detections': {
+                'color': 'blue',
+                'marker': 'o',
+                'size_base': base_size * 2,  # 2x base size
+                'size_max': base_size * 3,
+                'alpha_base': 0.4,
+                'alpha_max': 0.8,
+                'label': 'Network Output'
+            },
+            'tracks': {
+                'color': 'red',
+                'marker': '^',
+                'size_base': base_size,  # 1x base size
+                'alpha': 0.9,
+                'label': 'Tracker State',
+                'facecolors': 'none',
+                'edgecolors': 'red',
+                'linewidth': 1
+            },
             'coverage_bounds': {'color': 'gray', 'linestyle': '--', 'alpha': 0.5},
             'out_of_coverage': {'color': 'red', 'alpha': 0.1}
         }
+
+        # Unified colormap for all radar displays
+        self.radar_colormap = 'viridis'
 
     def load_data(self, labels_csv: str, predictions_csv: str, tracking_csv: Optional[str] = None):
         """Load all data sources."""
@@ -49,9 +77,9 @@ class TrackingVisualizationTool:
         return labels_df, predictions_df, tracking_df
 
     def create_comprehensive_visualization(self, sample_id: int, labels_df: pd.DataFrame,
-                                           predictions_df: pd.DataFrame, tracking_df: Optional[pd.DataFrame],
-                                           image_path: Path, rd_path: Path, ra_path: Path) -> plt.Figure:
-        """Create comprehensive 4-panel visualization with consistent styling."""
+                                         predictions_df: pd.DataFrame, tracking_df: Optional[pd.DataFrame],
+                                         image_path: Path, rd_path: Path, ra_path: Path) -> plt.Figure:
+        """Create comprehensive 4-panel visualization with enhanced styling."""
 
         # Load data files
         image = cv2.imread(str(image_path))
@@ -64,62 +92,68 @@ class TrackingVisualizationTool:
         sample_labels = labels_df[labels_df['numSample'] == sample_id]
         sample_predictions = predictions_df[predictions_df['sample_id'] == sample_id]
         sample_tracks = (tracking_df[tracking_df['sample_id'] == sample_id]
-                         if tracking_df is not None else None)
+                        if tracking_df is not None else None)
 
-        # Create figure with improved layout
-        fig, axs = plt.subplots(2, 2, figsize=(18, 12))
-        fig.suptitle(f'Radar Tracking Visualization - Sample {sample_id}', fontsize=16, fontweight='bold')
+        # Create figure with improved layout - add more space at bottom for legend
+        fig, axs = plt.subplots(2, 2, figsize=(20, 12))
+        fig.suptitle(f'Radar Tracking Visualization - Sample {sample_id}', fontsize=18, fontweight='bold')
 
-        # Panel 1: Camera image with bounding boxes
+        # Panel 1: Camera image with simplified bounding boxes
         if image is not None:
             image_viz = self._annotate_camera_image(image.copy(), sample_labels,
-                                                    sample_predictions, sample_tracks)
+                                                   sample_predictions, sample_tracks)
             axs[0, 0].imshow(image_viz)
-        axs[0, 0].set_title('Camera View with Projected Detections', fontweight='bold')
+        axs[0, 0].set_title('Camera View', fontweight='bold', fontsize=14)
         axs[0, 0].axis('off')
+        # Add legend to camera view
+        from matplotlib.patches import Rectangle
+        camera_legend = [
+            Rectangle((0, 0), 1, 1, facecolor='green', alpha=0.7, label='Labels'),
+            Rectangle((0, 0), 1, 1, facecolor='blue', alpha=0.7, label='Network Output'),
+            Rectangle((0, 0), 1, 1, facecolor='red', alpha=0.7, label='Tracker State')
+        ]
+        axs[0, 0].legend(handles=camera_legend, loc='upper right', fontsize=10)
 
-        # Panel 2: Improved BEV with consistent styling
+        # Panel 2: Fixed BEV with proper coordinate system
         self._create_bev_visualization(axs[0, 1], ra_map, sample_labels,
-                                       sample_predictions, sample_tracks)
-        axs[0, 1].set_title('Bird\'s Eye View (Consistent Styling)', fontweight='bold')
+                                     sample_predictions, sample_tracks)
+        axs[0, 1].set_title('Bird\'s Eye View (Cartesian Coordinates)', fontweight='bold', fontsize=14)
 
-        # Panel 3: Range-Doppler map
+        # Panel 3: Range-Doppler map with unified colormap
         self._create_rd_visualization(axs[1, 0], rd_map)
-        axs[1, 0].set_title('Range-Doppler Map', fontweight='bold')
+        axs[1, 0].set_title('Range-Doppler Map', fontweight='bold', fontsize=14)
 
-        # Panel 4: Range-Azimuth map with annotations
+        # Panel 4: Range-Azimuth map with unified colormap
         self._create_ra_visualization(axs[1, 1], ra_map, sample_labels,
-                                      sample_predictions, sample_tracks)
-        axs[1, 1].set_title('Range-Azimuth Map with Detections', fontweight='bold')
+                                    sample_predictions, sample_tracks)
+        axs[1, 1].set_title('Range-Azimuth Map', fontweight='bold', fontsize=14)
 
-        # Add unified legend
+        # Add unified legend with improved styling
         self._add_unified_legend(fig)
 
-        plt.tight_layout()
+        # Adjust layout to prevent legend overlap
+        plt.tight_layout(rect=[0, 0.05, 1, 0.96], h_pad=3.0)  # h_pad increases vertical padding
+
         return fig
 
     def _annotate_camera_image(self, image: np.ndarray, labels_df: pd.DataFrame,
-                               predictions_df: pd.DataFrame, tracks_df: Optional[pd.DataFrame]) -> np.ndarray:
-        """Annotate camera image with bounding boxes."""
+                              predictions_df: pd.DataFrame, tracks_df: Optional[pd.DataFrame]) -> np.ndarray:
+        """Annotate camera image with simplified bounding boxes (no text labels)."""
 
-        def draw_bbox(img, bbox, label, color, thickness=2):
+        def draw_simple_bbox(img, bbox, color, thickness=2):
+            """Draw bounding box without text labels."""
             x1, y1, x2, y2 = map(int, bbox)
             cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
-            # Add background for text readability
-            text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
-            cv2.rectangle(img, (x1, y1 - text_size[1] - 5), (x1 + text_size[0], y1), color, -1)
-            cv2.putText(img, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
             return img
 
-        # Ground truth (green)
+        # Labels (green)
         for _, row in labels_df.iterrows():
             scale_w, scale_h = self._get_scale_factor(image)
             bbox = (row['x1_pix'] * scale_w, row['y1_pix'] * scale_h,
-                    row['x2_pix'] * scale_w, row['y2_pix'] * scale_h)
-            label = f"GT R:{row['radar_R_m']:.1f}m A:{row['radar_A_deg']:.1f}°"
-            image = draw_bbox(image, bbox, label, (0, 255, 0), 3)
+                   row['x2_pix'] * scale_w, row['y2_pix'] * scale_h)
+            image = draw_simple_bbox(image, bbox, (0, 255, 0), 5)  # Green in RGB
 
-        # Network predictions (red)
+        # Network predictions (blue)
         for _, row in predictions_df.iterrows():
             range_m, azimuth_deg = row['range_m'], row['azimuth_deg']
             x = np.sin(np.deg2rad(azimuth_deg)) * range_m
@@ -131,10 +165,9 @@ class TrackingVisualizationTool:
             u2, v2 = int(u2 / 2), int(v2 / 2)
 
             bbox = (u1, v1, u2, v2)
-            label = f"Det R:{range_m:.1f}m A:{azimuth_deg:.1f}° C:{row['confidence']:.2f}"
-            image = draw_bbox(image, bbox, label, (255, 0, 0), 2)
+            image = draw_simple_bbox(image, bbox, (0, 0, 255), 3)  # Blue in RGB
 
-        # Tracker predictions (blue)
+        # Tracker predictions (red)
         if tracks_df is not None and not tracks_df.empty:
             for _, row in tracks_df.iterrows():
                 range_m, azimuth_deg = row['range_m'], row['azimuth_deg']
@@ -147,126 +180,158 @@ class TrackingVisualizationTool:
                 u2, v2 = int(u2 / 2), int(v2 / 2)
 
                 bbox = (u1, v1, u2, v2)
-                label = f"Track {row['track_id']} R:{range_m:.1f}m A:{azimuth_deg:.1f}° Age:{row['track_age']}"
-                image = draw_bbox(image, bbox, label, (0, 0, 255), 2)
+                image = draw_simple_bbox(image, bbox, (255, 0, 0), 1)  # Red in RGB
 
         return image
 
     def _create_bev_visualization(self, ax: plt.Axes, ra_map: np.ndarray,
                                   labels_df: pd.DataFrame, predictions_df: pd.DataFrame,
                                   tracks_df: Optional[pd.DataFrame]):
-        """Create improved BEV visualization with consistent styling."""
+        """Create BEV visualization using the working polar transform method."""
 
-        # Display the BEV background map
-        bev_img = self._convert_ra_to_bev(ra_map)
-        ax.imshow(bev_img, extent=[-103, 103, 0, 103], origin='lower', alpha=0.7, cmap='viridis')
+        # Create properly oriented BEV background map
+        bev_img = self._convert_ra_to_bev_fixed(ra_map)
+        max_range = self.radar_params['max_range']
+
+        # Display with correct coordinate system - flip x-axis to have positive on right
+        ax.imshow(bev_img, extent=[max_range, -max_range, 0, max_range],
+                  origin='lower', alpha=0.7, cmap=self.radar_colormap)
 
         # Add radar coverage visualization
         self._add_coverage_bounds_bev(ax)
 
-        # Convert and plot ground truth
+        # Plot annotations with proper layering
+        # Layer 1: Labels (green X - bottom layer but largest)
         for _, row in labels_df.iterrows():
             x, y = self._polar_to_cartesian(row['radar_R_m'], row['radar_A_deg'])
-            style = self.style_config['ground_truth']
-            ax.scatter(x, y, c=style['color'], marker=style['marker'], s=style['size'],
-                       alpha=style['alpha'], edgecolors='black', linewidth=1)
+            style = self.style_config['labels']
+            ax.scatter(x, y, c=style['color'], marker=style['marker'], s=style['size_base'],
+                       alpha=style['alpha'], linewidth=style['linewidth'], zorder=5)
 
-        # Convert and plot detections
+        # Layer 2: Detections (blue circles - middle layer)
         for _, row in predictions_df.iterrows():
             x, y = self._polar_to_cartesian(row['range_m'], row['azimuth_deg'])
-            style = self.style_config['detections']
-            ax.scatter(x, y, c=style['color'], marker=style['marker'], s=style['size'],
-                       alpha=style['alpha'], linewidth=2)
+            confidence = row['confidence']
 
-        # Convert and plot tracks
+            # Scale size based on confidence
+            style = self.style_config['detections']
+            size = style['size_base'] + (style['size_max'] - style['size_base']) * confidence
+            alpha = style['alpha_base'] + (style['alpha_max'] - style['alpha_base']) * confidence
+
+            ax.scatter(x, y, c=style['color'], marker=style['marker'], s=size,
+                       alpha=alpha, edgecolors='darkblue', linewidth=1, zorder=10)
+
+        # Layer 3: Tracks (red triangles - top layer)
         if tracks_df is not None and not tracks_df.empty:
             for _, row in tracks_df.iterrows():
                 x, y = self._polar_to_cartesian(row['range_m'], row['azimuth_deg'])
                 style = self.style_config['tracks']
-                ax.scatter(x, y, c=style['color'], marker=style['marker'], s=style['size'],
-                           alpha=style['alpha'], edgecolors='white', linewidth=1)
+                ax.scatter(x, y, marker=style['marker'], s=style['size_base'],
+                           alpha=style['alpha'], facecolors=style['facecolors'],
+                           edgecolors=style['edgecolors'], linewidth=style['linewidth']*1.5,
+                           zorder=15)  # Highest zorder
                 # Add track ID annotation
                 ax.annotate(f"T{row['track_id']}", (x, y), xytext=(5, 5),
-                            textcoords='offset points', fontsize=8, color='white',
-                            bbox=dict(boxstyle='round,pad=0.2', facecolor='blue', alpha=0.7))
+                            textcoords='offset points', fontsize=9, color='red',
+                            fontweight='bold',
+                            bbox=dict(boxstyle='round,pad=0.2', facecolor='white',
+                                      edgecolor='red', alpha=0.8),
+                            zorder=16)
 
-        self._setup_bev_axes(ax)
+        self._setup_bev_axes_fixed(ax)
+
+        # flip the x - axis
+        ax.invert_xaxis()
 
     def _create_rd_visualization(self, ax: plt.Axes, rd_map: np.ndarray):
-        """Create Range-Doppler visualization."""
-        ax.imshow(rd_map, aspect='auto', origin='lower', cmap='jet')
+        """Create Range-Doppler visualization with unified colormap."""
+        ax.imshow(rd_map, aspect='auto', origin='lower', cmap=self.radar_colormap)
         ax.invert_xaxis()
         self._setup_rd_axes(ax, rd_map.shape)
 
     def _create_ra_visualization(self, ax: plt.Axes, ra_map: np.ndarray,
-                                 labels_df: pd.DataFrame, predictions_df: pd.DataFrame,
-                                 tracks_df: Optional[pd.DataFrame]):
-        """Create Range-Azimuth visualization with consistent styling."""
+                               labels_df: pd.DataFrame, predictions_df: pd.DataFrame,
+                               tracks_df: Optional[pd.DataFrame]):
+        """Create Range-Azimuth visualization with unified colormap and enhanced symbols."""
 
-        # Display background map
-        ax.imshow(ra_map, aspect='auto', origin='lower', alpha=0.8, cmap='viridis')
+        # Display background map with unified colormap
+        ax.imshow(ra_map, aspect='auto', origin='lower', alpha=0.8, cmap=self.radar_colormap)
         ax.invert_xaxis()
 
         # Add coverage bounds
         self._add_coverage_bounds_ra(ax, ra_map.shape)
 
-        # Plot ground truth
+        # Plot in proper order with correct zorder
+        # Layer 1: Labels (green X - bottom but largest)
         for _, row in labels_df.iterrows():
             x, y = self._convert_ra_coords(row['radar_R_m'], row['radar_A_deg'], ra_map.shape)
-            style = self.style_config['ground_truth']
-            ax.scatter(x, y, c=style['color'], marker=style['marker'], s=style['size'],
-                       alpha=style['alpha'], edgecolors='black', linewidth=1)
+            style = self.style_config['labels']
+            ax.scatter(x, y, c=style['color'], marker=style['marker'], s=style['size_base'],
+                      alpha=style['alpha'], linewidth=style['linewidth'], zorder=5)
 
-        # Plot detections
+        # Layer 2: Detections (blue circles)
         for _, row in predictions_df.iterrows():
             x, y = self._convert_ra_coords(row['range_m'], row['azimuth_deg'], ra_map.shape)
-            style = self.style_config['detections']
-            ax.scatter(x, y, c=style['color'], marker=style['marker'], s=style['size'],
-                       alpha=style['alpha'], linewidth=2)
+            confidence = row['confidence']
 
-        # Plot tracks
+            # Scale size and alpha based on confidence
+            style = self.style_config['detections']
+            size = style['size_base'] + (style['size_max'] - style['size_base']) * confidence
+            alpha = style['alpha_base'] + (style['alpha_max'] - style['alpha_base']) * confidence
+
+            ax.scatter(x, y, c=style['color'], marker=style['marker'], s=size,
+                      alpha=alpha, edgecolors='darkblue', linewidth=1, zorder=10)
+
+        # Layer 3: Tracks (red hollow triangles - top layer)
         if tracks_df is not None and not tracks_df.empty:
             for _, row in tracks_df.iterrows():
                 x, y = self._convert_ra_coords(row['range_m'], row['azimuth_deg'], ra_map.shape)
                 style = self.style_config['tracks']
-                ax.scatter(x, y, c=style['color'], marker=style['marker'], s=style['size'],
-                           alpha=style['alpha'], edgecolors='white', linewidth=1)
+                ax.scatter(x, y, marker=style['marker'], s=style['size_base'],
+                          alpha=style['alpha'], facecolors=style['facecolors'],
+                          edgecolors=style['edgecolors'], linewidth=style['linewidth']*1.5,
+                          zorder=15)  # Highest zorder
 
         self._setup_ra_axes(ax, ra_map.shape)
 
-    def _convert_ra_to_bev(self, ra_map: np.ndarray) -> np.ndarray:
-        """Convert Range-Azimuth map to Bird's Eye View representation."""
-        height, width = ra_map.shape
-        bev_size = 512  # Fixed BEV image size
-        bev_img = np.zeros((bev_size, bev_size))
+    def _convert_ra_to_bev_fixed(self, ra_map: np.ndarray) -> np.ndarray:
+        """Convert Range-Azimuth map to BEV using polarTransform (working method)."""
+        from polarTransform import convertToCartesianImage
 
-        center = bev_size // 2
-        max_range = self.radar_params['max_range']
+        # 1. Normalize & make proper format
+        if ra_map.dtype != np.uint8:
+            ra_norm = ((ra_map - ra_map.min()) /
+                       (ra_map.max() - ra_map.min()) * 255).astype(np.uint8)
+        else:
+            ra_norm = ra_map.copy()
 
-        for i in range(height):
-            for j in range(width):
-                if ra_map[i, j] > 0:  # Only process non-zero pixels
-                    # Convert RA coordinates to polar
-                    range_m = (i / height) * max_range
-                    azimuth_deg = ((j / width) * 180 - 90)
+        # 2. Polar→Cartesian (BEV)
+        ra_for_polar = ra_norm.T
+        num_range_bins, num_az_bins = ra_norm.shape
+        RA_cartesian, _ = convertToCartesianImage(
+            ra_for_polar,
+            useMultiThreading=True,
+            initialAngle=-np.pi / 2,
+            finalAngle=+np.pi / 2,
+            order=1,
+            hasColor=False,
+            finalRadius=num_range_bins
+        )
 
-                    # Convert to BEV coordinates
-                    x, y = self._polar_to_cartesian(range_m, azimuth_deg)
+        # Fix orientation: flip vertically to correct upside down
+        bev = RA_cartesian
+        # bev = cv2.flip(RA_cartesian, flipCode=1)  # Flip vertically
+        bev = cv2.rotate(bev, cv2.ROTATE_90_CLOCKWISE)
+        bev = cv2.resize(bev, dsize=(400, 512))
 
-                    # Map to BEV image coordinates
-                    x_pix = int(center + (x / max_range) * center)
-                    y_pix = int(center - (y / max_range) * center)
-
-                    if 0 <= x_pix < bev_size and 0 <= y_pix < bev_size:
-                        bev_img[y_pix, x_pix] = ra_map[i, j]
-
-        return bev_img
+        return bev
 
     def _polar_to_cartesian(self, range_m: float, azimuth_deg: float) -> Tuple[float, float]:
-        """Convert polar coordinates to Cartesian."""
+        """Convert polar coordinates to Cartesian with proper radar convention."""
         azimuth_rad = np.deg2rad(azimuth_deg)
-        x = range_m * np.sin(azimuth_rad)
-        y = range_m * np.cos(azimuth_rad)
+        # Standard radar convention: 0° = North (forward), positive clockwise
+        x = range_m * np.sin(azimuth_rad)  # Lateral (positive = right)
+        y = range_m * np.cos(azimuth_rad)  # Forward (positive = forward)
         return x, y
 
     def _convert_ra_coords(self, range_m: float, azimuth_deg: float, ra_shape: Tuple[int, int]) -> Tuple[int, int]:
@@ -282,53 +347,62 @@ class TrackingVisualizationTool:
 
         # Draw range circle
         circle = plt.Circle((0, 0), max_range, fill=False,
-                            color=self.style_config['coverage_bounds']['color'],
-                            linestyle=self.style_config['coverage_bounds']['linestyle'],
-                            alpha=self.style_config['coverage_bounds']['alpha'])
+                           color=self.style_config['coverage_bounds']['color'],
+                           linestyle=self.style_config['coverage_bounds']['linestyle'],
+                           alpha=self.style_config['coverage_bounds']['alpha'], linewidth=2)
         ax.add_patch(circle)
 
-        # Draw azimuth sector
+        # Draw azimuth sector boundaries
         min_az = self.radar_params['min_azimuth']
         max_az = self.radar_params['max_azimuth']
 
-        # Left bound
+        # Left boundary
         x1 = max_range * np.sin(np.deg2rad(min_az))
         y1 = max_range * np.cos(np.deg2rad(min_az))
         ax.plot([0, x1], [0, y1], color=self.style_config['coverage_bounds']['color'],
                 linestyle=self.style_config['coverage_bounds']['linestyle'],
-                alpha=self.style_config['coverage_bounds']['alpha'])
+                alpha=self.style_config['coverage_bounds']['alpha'], linewidth=2)
 
-        # Right bound
+        # Right boundary
         x2 = max_range * np.sin(np.deg2rad(max_az))
         y2 = max_range * np.cos(np.deg2rad(max_az))
         ax.plot([0, x2], [0, y2], color=self.style_config['coverage_bounds']['color'],
                 linestyle=self.style_config['coverage_bounds']['linestyle'],
-                alpha=self.style_config['coverage_bounds']['alpha'])
+                alpha=self.style_config['coverage_bounds']['alpha'], linewidth=2)
 
     def _add_coverage_bounds_ra(self, ax: plt.Axes, ra_shape: Tuple[int, int]):
         """Add radar coverage bounds to RA plot."""
         height, width = ra_shape
 
         # Max range line
-        max_range_y = (self.radar_params['max_range'] / self.radar_params['max_range']) * height
+        max_range_y = height - 1  # Top of the image
         style = self.style_config['coverage_bounds']
-        ax.axhline(y=max_range_y, color=style['color'], linestyle=style['linestyle'], alpha=style['alpha'])
+        ax.axhline(y=max_range_y, color=style['color'], linestyle=style['linestyle'],
+                  alpha=style['alpha'], linewidth=2)
 
         # Azimuth bounds
-        min_az_x = ((self.radar_params['min_azimuth'] + 90) / 180) * width
-        max_az_x = ((self.radar_params['max_azimuth'] + 90) / 180) * width
-        ax.axvline(x=min_az_x, color=style['color'], linestyle=style['linestyle'], alpha=style['alpha'])
-        ax.axvline(x=max_az_x, color=style['color'], linestyle=style['linestyle'], alpha=style['alpha'])
+        min_az_x = 0  # Left edge
+        max_az_x = width - 1  # Right edge
+        ax.axvline(x=min_az_x, color=style['color'], linestyle=style['linestyle'],
+                  alpha=style['alpha'], linewidth=2)
+        ax.axvline(x=max_az_x, color=style['color'], linestyle=style['linestyle'],
+                  alpha=style['alpha'], linewidth=2)
 
-    def _setup_bev_axes(self, ax: plt.Axes):
-        """Setup BEV axes with proper labels."""
+    def _setup_bev_axes_fixed(self, ax: plt.Axes):
+        """Setup BEV axes with fixed coordinate system."""
         max_range = self.radar_params['max_range']
         ax.set_xlim(-max_range, max_range)
         ax.set_ylim(0, max_range)
-        ax.set_xlabel('Lateral Distance (m)', fontweight='bold')
-        ax.set_ylabel('Forward Distance (m)', fontweight='bold')
+        ax.set_xlabel('Lateral Distance (m)', fontweight='bold', fontsize=12)
+        ax.set_ylabel('Forward Distance (m)', fontweight='bold', fontsize=12)
         ax.grid(True, alpha=0.3)
         ax.set_aspect('equal')
+
+        # Add more detailed tick marks
+        x_ticks = np.arange(-100, 101, 20)
+        y_ticks = np.arange(0, max_range+1, 20)
+        ax.set_xticks(x_ticks)
+        ax.set_yticks(y_ticks)
 
     def _setup_rd_axes(self, ax: plt.Axes, shape: Tuple[int, int]):
         """Setup Range-Doppler axes."""
@@ -339,14 +413,14 @@ class TrackingVisualizationTool:
         x_ticks = doppler_ticks / 0.1 + width / 2
         ax.set_xticks(x_ticks)
         ax.set_xticklabels([f"{t:.1f}" for t in doppler_ticks])
-        ax.set_xlabel("Doppler Velocity (m/s)", fontweight='bold')
+        ax.set_xlabel("Doppler Velocity (m/s)", fontweight='bold', fontsize=12)
 
         # Range axis
         range_ticks = [0, 20, 40, 60, 80, 100]
         y_ticks = [(r / self.radar_params['max_range']) * height for r in range_ticks]
         ax.set_yticks(y_ticks)
         ax.set_yticklabels([f"{r}m" for r in range_ticks])
-        ax.set_ylabel("Range (m)", fontweight='bold')
+        ax.set_ylabel("Range (m)", fontweight='bold', fontsize=12)
 
     def _setup_ra_axes(self, ax: plt.Axes, shape: Tuple[int, int]):
         """Setup Range-Azimuth axes."""
@@ -357,26 +431,41 @@ class TrackingVisualizationTool:
         x_ticks = [((a + 90) / 180) * width for a in azimuth_ticks]
         ax.set_xticks(x_ticks)
         ax.set_xticklabels([f"{a}°" for a in azimuth_ticks])
-        ax.set_xlabel("Azimuth Angle (degrees)", fontweight='bold')
+        ax.set_xlabel("Azimuth Angle (degrees)", fontweight='bold', fontsize=12)
 
         # Range axis
         range_ticks = [0, 20, 40, 60, 80, 100]
         y_ticks = [(r / self.radar_params['max_range']) * height for r in range_ticks]
         ax.set_yticks(y_ticks)
         ax.set_yticklabels([f"{r}m" for r in range_ticks])
-        ax.set_ylabel("Range (m)", fontweight='bold')
+        ax.set_ylabel("Range (m)", fontweight='bold', fontsize=12)
 
     def _add_unified_legend(self, fig: plt.Figure):
-        """Add unified legend for all plots."""
+        """Add unified legend with enhanced styling."""
         legend_elements = []
-        for key, style in self.style_config.items():
-            if 'label' in style:
-                legend_elements.append(plt.Line2D([0], [0], marker=style['marker'], color='w',
-                                                  markerfacecolor=style['color'], markersize=8,
-                                                  alpha=style['alpha'], label=style['label']))
 
-        fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.02),
-                   ncol=len(legend_elements), fontsize=12, frameon=True, fancybox=True, shadow=True)
+        # Labels (green X with no line)
+        legend_elements.append(plt.Line2D([0], [0], marker='x', color='w',
+                                          markerfacecolor='green', markersize=12,
+                                          markeredgecolor='green', markeredgewidth=3,
+                                          linestyle='none', label='Labels'))
+
+        # Network Output (blue circles)
+        legend_elements.append(plt.Line2D([0], [0], marker='o', color='w',
+                                         markerfacecolor='blue', markersize=10,
+                                         alpha=0.7, markeredgecolor='darkblue',
+                                         linestyle='none', label='Network Output'))
+
+        # Tracker State (red hollow triangles)
+        legend_elements.append(plt.Line2D([0], [0], marker='^', color='w',
+                                         markerfacecolor='none', markersize=12,
+                                         markeredgecolor='red', markeredgewidth=2,
+                                         linestyle='none', label='Tracker State'))
+
+        # Position legend below the plots with no overlap
+        fig.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, 0.01),
+                  ncol=len(legend_elements), fontsize=14, frameon=True, fancybox=True,
+                  shadow=True, borderpad=1)
 
     def _get_scale_factor(self, image: np.ndarray) -> Tuple[float, float]:
         """Calculate scale factors for image."""
@@ -385,9 +474,9 @@ class TrackingVisualizationTool:
 
 
 def create_tracking_video(data_dir: Path, output_dir: Path, labels_csv: str,
-                          predictions_csv: str, tracking_csv: Optional[str] = None,
-                          max_samples: Optional[int] = None) -> str:
-    """Create video from tracking visualizations."""
+                         predictions_csv: str, tracking_csv: Optional[str] = None,
+                         max_samples: Optional[int] = None) -> str:
+    """Create video from enhanced tracking visualizations."""
 
     viz_tool = TrackingVisualizationTool()
     labels_df, predictions_df, tracking_df = viz_tool.load_data(labels_csv, predictions_csv, tracking_csv)
@@ -412,33 +501,34 @@ def create_tracking_video(data_dir: Path, output_dir: Path, labels_csv: str,
         if not all(p.exists() for p in [image_path, rd_path, ra_path]):
             continue
 
-        # Create visualization
+        # Create enhanced visualization
         fig = viz_tool.create_comprehensive_visualization(
             sample_id, labels_df, predictions_df, tracking_df,
             image_path, rd_path, ra_path
         )
 
-        # Save frame
+        # Save frame with higher DPI for better quality
         frame_path = frames_dir / f"frame_{i:06d}.png"
-        fig.savefig(frame_path, dpi=100, bbox_inches='tight')
+        fig.savefig(frame_path, dpi=120, bbox_inches='tight', facecolor='white')
         plt.close(fig)
         created_frames.append(frame_path)
 
         if i % 10 == 0:
-            print(f"Created frame {i + 1}/{len(sample_ids)}")
+            print(f"Created enhanced frame {i+1}/{len(sample_ids)}")
 
     # Create video using ffmpeg (if available)
-    video_path = output_dir / 'tracking_visualization.mp4'
+    video_path = output_dir / 'enhanced_tracking_visualization.mp4'
     try:
         import subprocess
         cmd = [
             'ffmpeg', '-y', '-framerate', '5',
             '-i', str(frames_dir / 'frame_%06d.png'),
             '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+            '-crf', '18',  # Higher quality
             str(video_path)
         ]
         subprocess.run(cmd, check=True, capture_output=True)
-        print(f"Video created: {video_path}")
+        print(f"Enhanced video created: {video_path}")
 
         # Clean up frames
         for frame in created_frames:
@@ -446,7 +536,7 @@ def create_tracking_video(data_dir: Path, output_dir: Path, labels_csv: str,
         frames_dir.rmdir()
 
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print(f"FFmpeg not available. Frame images saved in: {frames_dir}")
+        print(f"FFmpeg not available. Enhanced frame images saved in: {frames_dir}")
         video_path = frames_dir
 
     return str(video_path)
