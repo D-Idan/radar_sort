@@ -5,35 +5,27 @@ Kalman filter implementation for radar object tracking.
 Adapted for 2D position and velocity tracking.
 """
 import numpy as np
-from typing import Tuple
+from typing import Tuple, List
 
 
 class RadarKalmanFilter:
     """
-    Kalman filter for tracking radar objects in 2D space.
+    Kalman filter for tracking radar objects in 2D space with variable time steps.
 
     State vector: [x, y, vx, vy] (position and velocity)
     Measurement vector: [x, y] (position only)
     """
 
-    def __init__(self, dt: float = 1.0):
+    def __init__(self, base_dt: float = 0.1):
         """
         Initialize Kalman filter.
 
         Args:
-            dt: Time step between measurements (seconds)
+            base_dt: Base time step for process noise tuning (seconds)
         """
-        self.dt = dt
+        self.base_dt = base_dt
         self.dim_x = 4  # State dimension: [x, y, vx, vy]
         self.dim_z = 2  # Measurement dimension: [x, y]
-
-        # State transition matrix (constant velocity model)
-        self.F = np.array([
-            [1, 0, dt, 0],
-            [0, 1, 0, dt],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1]
-        ])
 
         # Measurement matrix (observe position only)
         self.H = np.array([
@@ -41,20 +33,36 @@ class RadarKalmanFilter:
             [0, 1, 0, 0]
         ])
 
-        # Process noise covariance matrix
-        q = 10.0  # Process noise magnitude
-        self.Q = np.array([
-            [dt ** 4 / 4, 0, dt ** 3 / 2, 0],
-            [0, dt ** 4 / 4, 0, dt ** 3 / 2],
-            [dt ** 3 / 2, 0, dt ** 2, 0],
-            [0, dt ** 3 / 2, 0, dt ** 2]
-        ]) * q
+        # Base process noise magnitude
+        self.q = 10.0  # Adjust based on expected acceleration
 
         # Measurement noise covariance matrix
         self.R = np.eye(2) * 0.5  # 0.5 meter standard deviation
 
         # Initial state covariance matrix
-        self.P_init = np.eye(4) * 50.0  # High initial uncertainty
+        self.P_init = np.eye(4) * 50.0
+
+    def _get_F_matrix(self, dt: float) -> np.ndarray:
+        """Get state transition matrix for given time step."""
+        return np.array([
+            [1, 0, dt, 0],
+            [0, 1, 0, dt],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ])
+
+    def _get_Q_matrix(self, dt: float) -> np.ndarray:
+        """Get process noise matrix for given time step."""
+        # Adaptive process noise based on time step
+        # Larger time steps = more uncertainty
+        q_scaled = self.q * (dt / self.base_dt)
+
+        return q_scaled * np.array([
+            [dt ** 4 / 4, 0, dt ** 3 / 2, 0],
+            [0, dt ** 4 / 4, 0, dt ** 3 / 2],
+            [dt ** 3 / 2, 0, dt ** 2, 0],
+            [0, dt ** 3 / 2, 0, dt ** 2]
+        ])
 
     def initiate(self, measurement: Tuple[float, float]) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -72,24 +80,57 @@ class RadarKalmanFilter:
 
         return state, covariance
 
-    def predict(self, state: np.ndarray, covariance: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def predict(self, state: np.ndarray, covariance: np.ndarray,
+                dt: float) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Predict next state using motion model.
+        Predict next state using motion model with specific time step.
 
         Args:
             state: Current state vector
             covariance: Current state covariance matrix
+            dt: Time step for this prediction (seconds)
 
         Returns:
             Tuple of (predicted_state, predicted_covariance)
         """
+        F = self._get_F_matrix(dt)
+        Q = self._get_Q_matrix(dt)
+
         # Predict state: x_{k|k-1} = F * x_{k-1|k-1}
-        state_pred = self.F @ state
+        state_pred = F @ state
 
         # Predict covariance: P_{k|k-1} = F * P_{k-1|k-1} * F^T + Q
-        covariance_pred = self.F @ covariance @ self.F.T + self.Q
+        covariance_pred = F @ covariance @ F.T + Q
 
         return state_pred, covariance_pred
+
+    def multi_step_predict(self, state: np.ndarray, covariance: np.ndarray,
+                           total_dt: float, step_dt: float) -> List[Tuple[np.ndarray, np.ndarray]]:
+        """
+        Perform multiple prediction steps for large time gaps.
+
+        Args:
+            state: Current state vector
+            covariance: Current state covariance matrix
+            total_dt: Total time to predict ahead
+            step_dt: Time step for each prediction
+
+        Returns:
+            List of (state, covariance) tuples for each step
+        """
+        predictions = []
+        current_state = state
+        current_cov = covariance
+
+        num_steps = int(np.ceil(total_dt / step_dt))
+
+        for i in range(num_steps):
+            # Use remaining time for last step if needed
+            dt = min(step_dt, total_dt - i * step_dt)
+            current_state, current_cov = self.predict(current_state, current_cov, dt)
+            predictions.append((current_state.copy(), current_cov.copy()))
+
+        return predictions
 
     def update(self,
                state: np.ndarray,

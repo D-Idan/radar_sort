@@ -1,6 +1,5 @@
 # offline_tracking.py
 import copy
-import json
 from pathlib import Path
 
 import numpy as np
@@ -19,9 +18,10 @@ from radar_tracking.track_viz import (
     visualize_tracklet_lifetime_histogram,
     visualize_avg_confidence_over_time,
     visualize_all_frames_3d_overview,
-    visualize_tracking_temporal_evolution
+    visualize_tracking_temporal_evolution, visualize_timing_analysis, visualize_tracking_during_gaps
 )
 from tracking_visualization import TrackingVisualizationTool, create_tracking_video
+from utils.T_FFTRadNet.RadIal.plots.visualize_timing import plot_timing_analysis, plot_detailed_timing_analysis
 from utils.T_FFTRadNet.RadIal.utils.tracking_metrics import TrackingEvaluator, evaluate_tracking_sequence
 
 def setup_tracking_system():
@@ -72,10 +72,8 @@ def load_labels(label_csv_path: str) -> pd.DataFrame:
     return df
 
 
-def build_detections_for_frame(
-        preds_df: pd.DataFrame,
-        frame_id: int
-) -> list[Detection]:
+def build_detections_for_frame(preds_df: pd.DataFrame, frame_id: int,
+                              timestamp_us: float) -> List[Detection]:
     """
     Given the full predictions DataFrame and a specific frame_id (sample_id),
     return a list of Detection objects for that frame.
@@ -83,18 +81,21 @@ def build_detections_for_frame(
     # Filter all rows whose sample_id == frame_id
     sub = preds_df[preds_df['sample_id'] == frame_id]
     dets: list[Detection] = []
+
+    # Convert timestamp from microseconds to seconds
+    timestamp_s = timestamp_us / 1_000_000
+
     for _, row in sub.iterrows():
-        r = float(row['range_m'])
-        az_deg = float(row['azimuth_deg'])
         det = Detection(
-            range_m=r,
-            azimuth_rad=np.radians(az_deg),
+            range_m=float(row['range_m']),
+            azimuth_rad=np.radians(float(row['azimuth_deg'])),
             confidence=float(row['confidence']),
-            timestamp=float(frame_id)
+            timestamp=timestamp_s,  # Use actual timestamp
+            frame_id=frame_id
         )
-        # We attach detection_id in a custom attribute so we can save later
         det._detection_id = int(row['detection_id'])
         dets.append(det)
+
     return dets
 
 
@@ -175,7 +176,7 @@ def offline_tracking(
         max_video_samples: Optional[int] = 100
 ):
     """
-    Main offline‐tracking function with visualization and evaluation:
+    Main offline‐tracking function with visualization and evaluation with timestamp support:
       1) Reads predictions + labels
       2) Iterates over each unique frame_id in ascending order
       3) Builds Detection objects, calls tracker.update(...)
@@ -198,6 +199,11 @@ def offline_tracking(
     # 1) Load all_predictions.csv and labels.csv
     preds_df = load_predictions(preds_csv)
     labels_df = load_labels(labels_csv)
+
+    # Get timestamps from labels
+    timestamps_df = labels_df[['numSample', 'timestamp_us']].drop_duplicates()
+    timestamps_dict = dict(zip(timestamps_df['numSample'],
+                             timestamps_df['timestamp_us']))
 
     # 2) Unique frame IDs (sample_id) in sorted order
     all_frames = sorted(preds_df['sample_id'].unique().tolist())
@@ -227,9 +233,12 @@ def offline_tracking(
     all_ground_truth: List[List[Detection]] = []
     all_tracks: List[List[Track]] = []
 
+    # Add timing analysis storage
+    frame_times = []
+    time_gaps = []
+
     # 4) Loop over frames
-    prev_frame_id = None
-    base_dt = config['dt']
+    prev_timestamp = None
     for frame_id in tqdm(all_frames,
                          total=len(all_frames),
                          desc="Processing Frames",
@@ -237,24 +246,29 @@ def offline_tracking(
                          colour="green",
                          dynamic_ncols=True):
 
-        # Calculate dynamic dt
-        if prev_frame_id is not None:
-            frame_gap = frame_id - prev_frame_id
-            dynamic_dt = frame_gap * base_dt
+        # Get timestamp for this frame
+        timestamp_us = timestamps_dict.get(frame_id, frame_id * 1_000_000)
+        timestamp_s = timestamp_us / 1_000_000
+
+        frame_times.append((frame_id, timestamp_s))
+
+        # Calculate time gap
+        if prev_timestamp is not None:
+            gap = timestamp_s - prev_timestamp
+            time_gaps.append(gap)
+            dt = gap
         else:
-            dynamic_dt = base_dt
-        # Store prev_frame_id
-        prev_frame_id = frame_id
+            dt = config.get('base_dt', 0.1)
 
         # a) Build detections for this frame
-        detections = build_detections_for_frame(preds_df, frame_id)
+        detections = build_detections_for_frame(preds_df, frame_id, timestamp_us)
         det_counts.append(len(detections))
 
         # b) Build ground truth for this frame
         ground_truth = build_ground_truth_for_frame(labels_df, frame_id)
 
         # c) Update tracker
-        active_tracks = manager.update(detections, ground_truth, dt=dynamic_dt)
+        active_tracks = manager.update(detections, ground_truth, current_time=timestamp_s)
 
         # Store data for comprehensive visualizations
         all_detections.append(detections)
@@ -295,6 +309,8 @@ def offline_tracking(
                 'track_age': int(track.age),
                 'hits': int(track.hits),
                 'track_state': track.state.name if hasattr(track.state, 'name') else str(track.state),
+                'timestamp': timestamp_s,
+                'time_gap': gap if prev_timestamp else 0.0,
                 # x1..y4 left as NaN placeholders; replace if you have pixel‐corner data
                 'x1': np.nan, 'y1': np.nan,
                 'x2': np.nan, 'y2': np.nan,
@@ -302,6 +318,8 @@ def offline_tracking(
                 'x4': np.nan, 'y4': np.nan
             }
             tracking_rows.append(row)
+
+        prev_timestamp = timestamp_s
 
         # e) Visualize this frame (individual frame visualization)
         visualize_frame_radar_azimuth(
@@ -315,8 +333,9 @@ def offline_tracking(
     # 5) Build DataFrame and write tracking.csv
     track_df = pd.DataFrame(tracking_rows)
     cols = [
-        'sample_id', 'frame_id', 'track_id', 'detection_id', 'confidence',
-        'range_m', 'azimuth_deg', 'track_age', 'hits', 'track_state',
+        'sample_id', 'frame_id', 'timestamp', 'time_gap', 'track_id',
+        'detection_id', 'confidence', 'range_m', 'azimuth_deg',
+        'track_age', 'hits', 'track_state',
         'x1', 'y1', 'x2', 'y2', 'x3', 'y3', 'x4', 'y4'
     ]
     track_df = track_df[cols]
@@ -344,6 +363,8 @@ def offline_tracking(
     # c) Average Confidence of Active Tracks Over Time
     visualize_avg_confidence_over_time(
         all_frames=all_frames,
+        all_tracks=all_tracks,
+        frame_times=frame_times,
         avg_confidence_per_frame=avg_confidence_per_frame,
         output_dir=str(output_paths['summary_plots'])
     )
@@ -354,6 +375,7 @@ def offline_tracking(
         all_ground_truth=all_ground_truth,
         all_tracks=all_tracks,
         all_frames=all_frames,
+        frame_times=frame_times,
         output_dir=str(output_paths['summary_plots'])
     )
 
@@ -363,8 +385,30 @@ def offline_tracking(
         all_ground_truth=all_ground_truth,
         all_tracks=all_tracks,
         all_frames=all_frames,
+        frame_times=frame_times,
         output_dir=str(output_paths['summary_plots'])
     )
+
+    # Visualize timing analysis
+    visualize_timing_analysis(
+        frame_times=frame_times,
+        time_gaps=time_gaps,
+        output_dir=str(output_paths['summary_plots'])
+    )
+
+    # Visualize tracking during gaps
+    gap_threshold = np.percentile(time_gaps, 90) if time_gaps else 0.5  # Top 10% gaps
+    visualize_tracking_during_gaps(
+        all_tracks=all_tracks,
+        frame_times=frame_times,
+        gap_threshold=gap_threshold,
+        output_dir=str(output_paths['summary_plots'])
+    )
+
+    # Visualize timing analysis
+    plot_timing_analysis(labels_csv, output_path=Path(output_paths['summary_plots']) / Path("timing_analysis.png"))
+    plot_detailed_timing_analysis(labels_csv,
+                                  output_path=Path(output_paths['summary_plots']) / Path("detailed_timing_analysis.png"))
 
     # Save tracking summary
     summary_file = output_paths['logs'] / 'tracking_summary.txt'
@@ -374,6 +418,21 @@ def offline_tracking(
         original_stdout = sys.stdout
         sys.stdout = f
         manager.print_summary()
+
+        # Add timing statistics
+        if time_gaps:
+            print("\n" + "=" * 50)
+            print("TIMING STATISTICS")
+            print("=" * 50)
+            print(f"Total duration: {frame_times[-1][1] - frame_times[0][1]:.2f} seconds")
+            print(f"Number of frames: {len(frame_times)}")
+            print(f"Average time gap: {np.mean(time_gaps):.3f} seconds")
+            print(f"Median time gap: {np.median(time_gaps):.3f} seconds")
+            print(f"Max time gap: {np.max(time_gaps):.3f} seconds")
+            print(f"Min time gap: {np.min(time_gaps):.3f} seconds")
+            print(f"Gaps > 0.5s: {sum(1 for g in time_gaps if g > 0.5)}")
+            print("=" * 50)
+
         sys.stdout = original_stdout
 
     # ===== ENHANCED EVALUATION METRICS =====
@@ -484,7 +543,8 @@ if __name__ == "__main__":
         'max_age': 3,
         'min_hits': 3,
         'iou_threshold': 6.0,
-        'dt': 0.1,
+        'base_dt': 0.1,  # 100ms base time step
+        'max_dt_gap': 0.5,  # Trigger multi-step prediction for gaps > 0.5s
 
         # Confidence-based parameters
         'min_confidence_init': 0.7,

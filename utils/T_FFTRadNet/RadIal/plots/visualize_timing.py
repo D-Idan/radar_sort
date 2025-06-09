@@ -242,3 +242,4 @@ if __name__ == "__main__":
 
 
     plot_timing_analysis(labels_path, output_path="timing_analysis.png")
+    plot_detailed_timing_analysis(labels_path, output_path="detailed_timing_analysis.png")

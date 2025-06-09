@@ -15,14 +15,16 @@ class Detection:
         range_m: Range distance in meters
         azimuth_rad: Azimuth angle in radians
         confidence: Detection confidence score (0.0 to 1.0)
-        timestamp: Detection timestamp
+        timestamp: Absolute timestamp in seconds
+        frame_id: Frame/sample ID
         cartesian_pos: Converted Cartesian position (x, y)
-        bbox_corners: Optional bounding box corners in Cartesian coordinates RA map
+        bbox_corners: Optional bounding box corners
     """
     range_m: float
     azimuth_rad: float
     confidence: float
-    timestamp: float
+    timestamp: float  # Absolute timestamp in seconds
+    frame_id: Optional[int] = None
     cartesian_pos: Optional[Tuple[float, float]] = None
     bbox_corners: Optional[dict] = None
 

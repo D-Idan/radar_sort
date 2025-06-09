@@ -29,7 +29,9 @@ class RadarTracker:
                  max_age: int = 5,
                  min_hits: int = 3,
                  iou_threshold: float = 5.0,  # Distance threshold in meters
-                 dt: float = 1.0,
+                dt: float = 0.1,  # Default time step for predictions
+                 base_dt: float = 0.1,
+                 max_dt_gap: float = 1.0,
                  # Confidence-based parameters
                  min_confidence_init: float = 0.5,
                  min_confidence_assoc: float = 0.3,
@@ -41,15 +43,15 @@ class RadarTracker:
                  min_azimuth_deg: float = -90.0,
                  max_azimuth_deg: float = 90.0,
                  range_buffer: float = 10.0,
-                 azimuth_buffer_deg: float = 5.0):
+                 azimuth_buffer_deg: float = 5.0,
+                 ):
         """
-        Initialize radar tracker.
+        Initialize radar tracker with timestamp support.
 
         Args:
             max_age: Maximum frames to keep track alive without detections
             min_hits: Minimum detections before track is considered confirmed
             iou_threshold: Maximum distance for association (meters)
-            dt: Time step between frames (seconds)
             min_confidence_init: Minimum confidence required to initiate new track
             min_confidence_assoc: Minimum confidence required for association
             confidence_weight: Weight for confidence in association cost (0.0-1.0)
@@ -60,11 +62,15 @@ class RadarTracker:
             max_azimuth_deg: Maximum azimuth coverage (degrees)
             range_buffer: Buffer zone for range culling (meters)
             azimuth_buffer_deg: Buffer zone for azimuth culling (degrees)
+            base_dt: Base time step for regular predictions (seconds)
+            max_dt_gap: Maximum time gap before multi-step prediction (seconds)
         """
         self.max_age = max_age
         self.min_hits = min_hits
         self.iou_threshold = iou_threshold
         self.dt = dt
+        self.base_dt = base_dt
+        self.max_dt_gap = max_dt_gap
 
         # Confidence-based parameters
         self.min_confidence_init = min_confidence_init
@@ -87,7 +93,7 @@ class RadarTracker:
             self.association_strategy = AssociationStrategy.CONFIDENCE_WEIGHTED
 
         # Initialize components
-        self.kf = RadarKalmanFilter(dt=dt)
+        self.kf = RadarKalmanFilter(base_dt=base_dt)
         self.metrics = RadarMetrics(max_distance_threshold=iou_threshold)
 
         # Tracking state
@@ -95,29 +101,48 @@ class RadarTracker:
         self.next_id = 1
         self.frame_count = 0
 
+        # Timestamp tracking
+        self.last_update_time = None
+        self.track_last_update_times = {}  # Track ID -> last update timestamp
+
         # Statistics for range culling
         self.tracks_culled_by_range = 0
 
-    def update(self, detections: List[Detection], dt: Optional[float] = None) -> List[Track]:
+    def update(self, detections: List[Detection], dt: Optional[float] = None,
+               current_time: Optional[float] = None) -> List[Track]:
         """
         Update tracker with new detections and dynamic time step.
 
         Args:
             detections: List of detections for current frame
             dt: Optional time step for this frame (if None, uses configured dt)
+            current_time: Optional current timestamp in seconds
 
         Returns:
             List of active tracks
         """
-        # Use provided dt or fallback to configured dt
-        frame_dt = dt if dt is not None else self.dt
+        # Calculate frame time step with comprehensive logic
+        if current_time is not None and self.last_update_time is not None:
+            # Use actual time difference when timestamps are available
+            frame_dt = current_time - self.last_update_time
+        elif dt is not None:
+            # Use provided dt
+            frame_dt = dt
+        else:
+            # Fall back to configured dt
+            frame_dt = self.dt
 
         # Filter detections by confidence for association
         high_conf_detections = [det for det in detections
                                 if det.confidence >= self.min_confidence_assoc]
 
-        # Predict all existing tracks with frame-specific dt
-        self._predict_tracks(frame_dt)
+        # Perform predictions based on actual time gap
+        if current_time is not None:
+            # Use timestamp-aware prediction for better handling of time gaps
+            self._predict_tracks_with_timestamp(current_time, frame_dt)
+        else:
+            # Fall back to simple prediction when no timestamp available
+            self._predict_tracks(frame_dt)
 
         # Remove tracks that are predicted to be outside radar coverage
         if self.enable_range_culling:
@@ -129,7 +154,9 @@ class RadarTracker:
         # Update matched tracks
         for track_idx, det_idx in matches:
             self.tracks[track_idx] = self._update_track(
-                self.tracks[track_idx], high_conf_detections[det_idx]
+                self.tracks[track_idx],
+                high_conf_detections[det_idx],
+                dt=frame_dt  # Pass the calculated time step
             )
 
         # Handle unmatched tracks
@@ -148,25 +175,63 @@ class RadarTracker:
         # Remove dead tracks
         self._remove_dead_tracks()
 
-        # Return confirmed tracks
+        # Update last update time if provided
+        if current_time is not None:
+            self.last_update_time = current_time
+
         return self._get_confirmed_tracks()
 
-    def _predict_tracks(self, dt: float):
-        """Predict all existing tracks with specific time step."""
-        for track in self.tracks:
-            # Update Kalman filter dt temporarily
-            old_dt = self.kf.dt
-            self.kf.dt = dt
-            self.kf.F[0, 2] = dt  # Update state transition matrix
-            self.kf.F[1, 3] = dt
+    def _predict_tracks_with_timestamp(self, current_time: float, time_gap: float):
+        """
+        Predict tracks considering actual time gaps with multi-step prediction for large gaps.
 
-            track.state, track.covariance = self.kf.predict(track.state, track.covariance)
+        Args:
+            current_time: Current timestamp in seconds
+            time_gap: Time since last update in seconds
+        """
+        for track in self.tracks:
+            # Get time since last update for this specific track
+            last_update = self.track_last_update_times.get(track.id,
+                                                           current_time - time_gap)
+            track_time_gap = current_time - last_update
+
+            if track_time_gap > self.max_dt_gap:
+                # Perform multi-step prediction for large gaps
+                predictions = self.kf.multi_step_predict(
+                    track.state, track.covariance,
+                    track_time_gap, self.base_dt
+                )
+                # Use final prediction
+                track.state, track.covariance = predictions[-1]
+
+                # Store intermediate predictions if needed for visualization
+                if hasattr(track, 'prediction_history'):
+                    track.prediction_history = predictions
+            else:
+                # Single prediction step
+                track.state, track.covariance = self.kf.predict(
+                    track.state, track.covariance, track_time_gap
+                )
+
             track.age += 1
 
-            # Restore original dt
-            self.kf.dt = old_dt
-            self.kf.F[0, 2] = old_dt
-            self.kf.F[1, 3] = old_dt
+            # Update track's last update time
+            self.track_last_update_times[track.id] = current_time
+
+    def _predict_tracks(self, dt: float):
+        """
+        Predict all existing tracks with specific time step (fallback method).
+
+        Args:
+            dt: Time step for prediction
+        """
+        for track in self.tracks:
+            track.state, track.covariance = self.kf.predict(
+                track.state,
+                track.covariance,
+                dt
+            )
+            track.age += 1
 
     def _is_within_radar_coverage(self, detection: Detection) -> bool:
         """
@@ -368,36 +433,55 @@ class RadarTracker:
             # For other strategies, use distance threshold
             return cost <= self.iou_threshold
 
-    def _update_track(self, track: Track, detection: Detection) -> Track:
+    def _update_track(self, track: Track, detection: Detection, dt: float = None) -> Track:
         """
         Update track with associated detection.
+
+        Args:
+            track: Track to update
+            detection: Detection to use for update
+            dt: Time step for this update (if None, uses self.dt)
+
+        Returns:
+            Updated track
         """
+        # Use provided dt or fall back to tracker's dt
+        if dt is None:
+            dt = self.dt
+
         # If this is the second detection, compute velocity estimate
         if track.hits == 1 and track.last_detection is not None:
             x_prev, y_prev = track.last_detection.cartesian_pos
             x_new, y_new = detection.cartesian_pos
-            dt = self.dt
+
+            # Calculate actual time difference for velocity computation
+            if hasattr(detection, 'timestamp') and hasattr(track.last_detection, 'timestamp'):
+                actual_dt = detection.timestamp - track.last_detection.timestamp
+                if actual_dt <= 0:
+                    actual_dt = dt  # Fallback if timestamps are invalid
+            else:
+                actual_dt = dt
 
             # Compute "observed" velocity
-            vx = (x_new - x_prev) / dt
-            vy = (y_new - y_prev) / dt
+            vx = (x_new - x_prev) / actual_dt
+            vy = (y_new - y_prev) / actual_dt
 
-            # First, run the usual KF‐predict
-            pred_state, pred_covariance = self.kf.predict(track.state, track.covariance)
+            # First, run the usual KF-predict with the current dt
+            pred_state, pred_covariance = self.kf.predict(track.state, track.covariance, dt)
 
             # Overwrite velocity entries with bootstrapped value
             pred_state[2] = vx
             pred_state[3] = vy
 
-            # Run KF‐update with modified state
+            # Run KF-update with modified state
             track.state, track.covariance = self.kf.update(
                 pred_state, pred_covariance, detection.cartesian_pos
             )
-
         else:
             # Normal predict→update cycle
+            pred_state, pred_covariance = self.kf.predict(track.state, track.covariance, dt)
             track.state, track.covariance = self.kf.update(
-                track.state, track.covariance, detection.cartesian_pos
+                pred_state, pred_covariance, detection.cartesian_pos
             )
 
         # Update bookkeeping fields
