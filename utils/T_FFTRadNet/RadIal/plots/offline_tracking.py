@@ -258,6 +258,7 @@ def offline_tracking(
             time_gaps.append(gap)
             dt = gap
         else:
+            # First frame - no gap to calculate
             dt = config.get('base_dt', 0.1)
 
         # a) Build detections for this frame

@@ -1,8 +1,8 @@
 """
 Data structures for radar object detection and tracking system.
 """
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple, Dict
 import numpy as np
 
 

@@ -29,7 +29,7 @@ class RadarTracker:
                  max_age: int = 5,
                  min_hits: int = 3,
                  iou_threshold: float = 5.0,  # Distance threshold in meters
-                dt: float = 0.1,  # Default time step for predictions
+                 dt: float = 0.1,  # Default time step for predictions
                  base_dt: float = 0.1,
                  max_dt_gap: float = 1.0,
                  # Confidence-based parameters
@@ -71,6 +71,8 @@ class RadarTracker:
         self.dt = dt
         self.base_dt = base_dt
         self.max_dt_gap = max_dt_gap
+        self.prediction_history = {}  # Track ID -> list of predictions
+        self.gap_predictions = {}     # Track ID -> predictions during gaps
 
         # Confidence-based parameters
         self.min_confidence_init = min_confidence_init
@@ -195,28 +197,57 @@ class RadarTracker:
                                                            current_time - time_gap)
             track_time_gap = current_time - last_update
 
+            # Store prediction information for visualization
+            if track.id not in self.prediction_history:
+                self.prediction_history[track.id] = []
+                self.gap_predictions[track.id] = []
+
             if track_time_gap > self.max_dt_gap:
-                # Perform multi-step prediction for large gaps
+                # Multi-step prediction for large gaps
                 predictions = self.kf.multi_step_predict(
                     track.state, track.covariance,
                     track_time_gap, self.base_dt
                 )
+
+                # Store intermediate predictions for visualization
+                for i, (pred_state, pred_cov) in enumerate(predictions):
+                    pred_time = last_update + (i + 1) * self.base_dt
+                    if pred_time < current_time:
+                        self.gap_predictions[track.id].append({
+                            'timestamp': pred_time,
+                            'state': pred_state.copy(),
+                            'covariance': pred_cov.copy(),
+                            'is_gap_prediction': True
+                        })
+
                 # Use final prediction
                 track.state, track.covariance = predictions[-1]
-
-                # Store intermediate predictions if needed for visualization
-                if hasattr(track, 'prediction_history'):
-                    track.prediction_history = predictions
             else:
                 # Single prediction step
+                old_state = track.state.copy()
                 track.state, track.covariance = self.kf.predict(
                     track.state, track.covariance, track_time_gap
                 )
 
-            track.age += 1
+                # Store single prediction
+                if track_time_gap > 0.1:  # Only store for significant gaps
+                    self.gap_predictions[track.id].append({
+                        'timestamp': current_time,
+                        'state': track.state.copy(),
+                        'covariance': track.covariance.copy(),
+                        'is_gap_prediction': True
+                    })
 
-            # Update track's last update time
+            track.age += 1
             self.track_last_update_times[track.id] = current_time
+
+        def get_track_predictions(self, track_id: int) -> List[Dict]:
+            """Get prediction history for a specific track."""
+            return self.gap_predictions.get(track_id, [])
+
+        def get_all_predictions(self) -> Dict[int, List[Dict]]:
+            """Get prediction history for all tracks."""
+            return self.gap_predictions.copy()
 
     def _predict_tracks(self, dt: float):
         """
